@@ -168,7 +168,6 @@ private:
     // Frosted glass card: tinted gradient, thin translucent border, top sheen, soft glow.
     lv_obj_t* Glass(lv_obj_t* parent, int x, int y, int w, int h, int radius, lv_color_t tint);
     void TintGlass(lv_obj_t* glass, lv_color_t tint);
-    lv_obj_t* NewGlow(lv_obj_t* parent, lv_color_t color);
     lv_obj_t* NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h);
     void CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color);
     void UpdateWave(lv_obj_t** bars, int level);
@@ -221,12 +220,6 @@ private:
     JotapeFace listen_face_;
     JotapeFace speak_face_;
 
-    lv_obj_t* boot_glow_ = nullptr;
-    lv_obj_t* home_glow_ = nullptr;
-    lv_obj_t* listen_glow_ = nullptr;
-    lv_obj_t* speak_glow_ = nullptr;
-    lv_obj_t* ring_glow_ = nullptr;
-
     lv_obj_t* terminal_status_ = nullptr;
     lv_obj_t* terminal_message_ = nullptr;
 
@@ -277,7 +270,7 @@ private:
     uint32_t blink_end_ = 0;
     int last_clock_min_ = -1;
     uint32_t rng_ = 0x4A07A9E1;
-    int wave_level_ = 0;  // smoothed sound level shown by the wave and the glow
+    int wave_level_ = 0;  // smoothed sound level shown by the wave
     lv_timer_t* timer_ = nullptr;
 };
 

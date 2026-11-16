@@ -10,9 +10,9 @@ de Waveshare; ver `config.h`.
 Paneles de vidrio (degradé + borde translúcido + brillo superior + glow),
 tipografía de puntos 5x7 (`font_jotape_dots_*`, generada con
 `dots2lvgl.py`), textos en Inter (`font_jotape_inter_*`, SIL OFL), halo
-radial detrás de la cabeza (`jotape_glow.c`) que respira y late con la voz,
+y la cabeza flotando sin halo,
 menú en mosaicos y temporizador con aro de progreso. El casco usa RGB565A8
-para que el halo se vea alrededor.
+para integrarse con cualquier fondo.
 
 ## Clima
 

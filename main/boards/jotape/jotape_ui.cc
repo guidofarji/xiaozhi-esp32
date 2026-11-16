@@ -5,7 +5,6 @@
 #include <string>
 
 #include "jotape_eyes.h"
-#include "jotape_glow.h"
 #include "jotape_helmet.h"
 
 LV_FONT_DECLARE(font_jotape_20);
@@ -79,12 +78,6 @@ lv_obj_t* Rect(lv_obj_t* parent, int x, int y, int w, int h, lv_color_t color) {
 }
 
 bool Is(const char* a, const char* b) { return strcmp(a, b) == 0; }
-
-// Smooth 0..255 oscillation for breathing effects.
-int Breath(uint32_t now, uint32_t period_ms) {
-    const int angle = static_cast<int>((now % period_ms) * 360 / period_ms);
-    return (lv_trigo_sin(angle) + LV_TRIGO_SIN_MAX) * 255 / (2 * LV_TRIGO_SIN_MAX);
-}
 
 // Material Symbols glyph for a WMO weather code.
 const char* WeatherIcon(int code, bool is_day) {
@@ -481,16 +474,6 @@ lv_obj_t* JotapeUi::Glass(lv_obj_t* parent, int x, int y, int w, int h, int radi
     return g;
 }
 
-lv_obj_t* JotapeUi::NewGlow(lv_obj_t* parent, lv_color_t color) {
-    lv_obj_t* glow = lv_image_create(parent);
-    lv_image_set_src(glow, &jotape_glow_200);
-    lv_obj_remove_flag(glow, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_image_recolor(glow, color, 0);
-    lv_obj_set_style_image_recolor_opa(glow, LV_OPA_COVER, 0);
-    lv_obj_set_style_image_opa(glow, LV_OPA_50, 0);
-    return glow;
-}
-
 lv_obj_t* JotapeUi::NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h) {
     lv_obj_t* btn = Glass(parent, x, y, w, h, h / 2, Orange());
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
@@ -526,13 +509,13 @@ void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
 
     // Toast: glass pill above every panel
     toast_ = Glass(screen_, 0, 0, 10, 10, 16, Orange());
-    lv_obj_set_size(toast_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_pad_hor(toast_, 14, 0);
-    lv_obj_set_style_pad_ver(toast_, 6, 0);
+    lv_obj_set_size(toast_, 190, 32);
     lv_obj_align(toast_, LV_ALIGN_BOTTOM_MID, 0, -14);
     toast_label_ = NewLabel(toast_, &text14_, Orange(), "");
-    lv_obj_set_style_max_width(toast_label_, kWidth - 50, 0);
-    lv_label_set_long_mode(toast_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(toast_label_, 176);
+    lv_label_set_long_mode(toast_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(toast_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(toast_label_);
     lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_event_cb(screen_, GestureCb, LV_EVENT_GESTURE, this);
@@ -575,12 +558,10 @@ void JotapeUi::AddFloat(lv_obj_t* obj, int base_y, int amplitude, uint32_t perio
     lv_anim_start(&a);
 }
 
-/* ---- Boot / listening / speaking: floating head with a glow ---- */
+/* ---- Boot / listening / speaking: floating head ---- */
 
 void JotapeUi::CreateBoot() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kBoot)] = NewPanel(screen_);
-    boot_glow_ = NewGlow(p, Green());
-    lv_obj_center(boot_glow_);
     boot_face_.Create(p, JotapeFaceSize::kXL);
     lv_obj_align(boot_face_.root(), LV_ALIGN_CENTER, 0, 0);
     AddFloat(boot_face_.root(), 0, 5, 1800);
@@ -620,8 +601,6 @@ void JotapeUi::HideWave(lv_obj_t** bars) {
 
 void JotapeUi::CreateListening() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kListening)] = NewPanel(screen_);
-    listen_glow_ = NewGlow(p, Orange());
-    lv_obj_center(listen_glow_);
     listen_face_.Create(p, JotapeFaceSize::kXL);
     lv_obj_align(listen_face_.root(), LV_ALIGN_CENTER, 0, 0);
     AddFloat(listen_face_.root(), 0, 5, 1800);
@@ -630,8 +609,6 @@ void JotapeUi::CreateListening() {
 
 void JotapeUi::CreateSpeaking() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kSpeaking)] = NewPanel(screen_);
-    speak_glow_ = NewGlow(p, Green());
-    lv_obj_center(speak_glow_);
     speak_face_.Create(p, JotapeFaceSize::kXL);
     lv_obj_align(speak_face_.root(), LV_ALIGN_CENTER, 0, 0);
     AddFloat(speak_face_.root(), 0, 5, 1800);
@@ -668,9 +645,6 @@ void JotapeUi::CreateHome() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kHome)] = NewPanel(screen_);
     lv_obj_add_event_cb(p, HomeClickCb, LV_EVENT_CLICKED, this);
 
-    home_glow_ = NewGlow(p, Green());
-    lv_obj_align(home_glow_, LV_ALIGN_BOTTOM_MID, 0, 70);
-
     lv_obj_t* pill = Glass(p, 12, 8, 216, 30, 15, Green());
     date_label_ = NewLabel(pill, &text14_, Mint(), "");
     lv_obj_align(date_label_, LV_ALIGN_LEFT_MID, 12, 0);
@@ -695,8 +669,7 @@ void JotapeUi::CreateHome() {
     clock_minutes_ = NewLabel(clock, &font_jotape_dots_7, Orange(), "--");
 
     home_info_ = Glass(p, 0, 0, 10, 10, 13, Orange());
-    lv_obj_set_size(home_info_, LV_SIZE_CONTENT, 26);
-    lv_obj_set_style_pad_hor(home_info_, 12, 0);
+    lv_obj_set_size(home_info_, 104, 26);
     lv_obj_set_flex_flow(home_info_, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(home_info_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
@@ -721,11 +694,22 @@ void JotapeUi::CreateMenu() {
     for (int i = 0; i < static_cast<int>(JotapeMenuItem::kCount); i++) {
         const int x = 12 + (i % 3) * 76;
         const int y = 40 + (i / 3) * 96;
-        lv_obj_t* tile = Glass(p, x, y, 68, 88, 18, i == 0 ? Orange() : Green());
-        lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_border_color(tile, Orange(), LV_STATE_PRESSED);
-        lv_obj_set_style_border_opa(tile, LV_OPA_COVER, LV_STATE_PRESSED);
-        lv_obj_set_style_shadow_opa(tile, LV_OPA_60, LV_STATE_PRESSED);
+        // Soft tile: no outline, just a faint tinted backdrop that lights up when pressed
+        const lv_color_t tint = i == 0 ? Orange() : Green();
+        lv_obj_t* tile = lv_obj_create(p);
+        lv_obj_remove_style_all(tile);
+        lv_obj_remove_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_pos(tile, x, y);
+        lv_obj_set_size(tile, 68, 88);
+        lv_obj_set_style_radius(tile, 18, 0);
+        lv_obj_set_style_bg_color(tile, lv_color_mix(tint, lv_color_black(), 34), 0);
+        lv_obj_set_style_bg_grad_color(tile, lv_color_mix(tint, lv_color_black(), 12), 0);
+        lv_obj_set_style_bg_grad_dir(tile, LV_GRAD_DIR_VER, 0);
+        lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(tile, lv_color_mix(Orange(), lv_color_black(), 90),
+                                  LV_STATE_PRESSED);
+        lv_obj_set_style_bg_grad_color(tile, lv_color_mix(Orange(), lv_color_black(), 40),
+                                       LV_STATE_PRESSED);
         lv_obj_add_event_cb(tile, MenuTileCb, LV_EVENT_CLICKED, this);
         menu_tiles_[i] = tile;
 
@@ -862,8 +846,6 @@ void JotapeUi::CreateRinging() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kRinging)] = NewPanel(screen_);
     lv_obj_add_event_cb(p, RingClickCb, LV_EVENT_CLICKED, this);
 
-    ring_glow_ = NewGlow(p, Orange());
-    lv_obj_center(ring_glow_);
     ring_icon_ = NewLabel(p, &font_jotape_bigicons_72, Orange(), BIG_ALARM);
     lv_obj_align(ring_icon_, LV_ALIGN_TOP_MID, 0, 14);
     ring_title_ = NewLabel(p, &font_jotape_dots_6, Mint(), "");
@@ -1108,16 +1090,9 @@ void JotapeUi::OnTimer() {
         RefreshClock();
     }
 
-    // Breathing glows (every other tick keeps redraws light)
-    if (tick_count_ % 2 == 0) {
-        if (current_ == JotapeScreen::kBoot) {
-            lv_obj_set_style_image_opa(boot_glow_, 60 + Breath(now, 3600) * 90 / 255, 0);
-        } else if (current_ == JotapeScreen::kHome) {
-            lv_obj_set_style_image_opa(home_glow_, 50 + Breath(now, 4400) * 70 / 255, 0);
-        } else if (current_ == JotapeScreen::kRinging) {
-            lv_obj_set_style_image_opa(ring_glow_, 70 + Breath(now, 900) * 185 / 255, 0);
-            lv_obj_set_style_text_opa(ring_title_, (now / 450) % 2 ? LV_OPA_COVER : LV_OPA_40, 0);
-        }
+    // Ringing: the time blinks
+    if (current_ == JotapeScreen::kRinging && tick_count_ % 2 == 0) {
+        lv_obj_set_style_text_opa(ring_title_, (now / 450) % 2 ? LV_OPA_COVER : LV_OPA_40, 0);
     }
 
     // Blink
@@ -1162,9 +1137,6 @@ void JotapeUi::OnTimer() {
         } else {
             UpdateWave(bars, wave_level_);
         }
-        // The glow behind the head swells with the voice
-        lv_obj_set_style_image_opa(listening ? listen_glow_ : speak_glow_,
-                                   40 + wave_level_ * 190 / 100, 0);
         if (!listening) {
             speak_face_.SetTalkLevel(
                 wave_level_ < 5 ? -1 : static_cast<int>(Random() % (wave_level_ + 1)));
