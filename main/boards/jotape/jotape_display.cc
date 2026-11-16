@@ -45,6 +45,7 @@ void JotapeDisplay::SetupUI() {
     };
     ui_.sound_level = sound_level_;
     ui_.Create(lv_screen_active(), CurrentFonts());
+    ui_.SetWeather(weather_);
 
     // The base class updates these icons from UpdateStatusBar().
     network_label_ = ui_.network_label();
@@ -55,7 +56,7 @@ void JotapeDisplay::SetupUI() {
 void JotapeDisplay::SyncScreen() {
     switch (Application::GetInstance().GetDeviceState()) {
         case kDeviceStateIdle:
-            if (ui_.current() != JotapeScreen::kMenu) {
+            if (ui_.current() != JotapeScreen::kMenu && ui_.current() != JotapeScreen::kWeather) {
                 ui_.Show(JotapeScreen::kHome);
             }
             break;
@@ -147,6 +148,14 @@ void JotapeDisplay::SetSoundLevelProvider(std::function<int()> provider) {
     DisplayLockGuard lock(this);
     sound_level_ = provider;
     ui_.sound_level = provider;
+}
+
+void JotapeDisplay::SetWeather(const JotapeWeatherView& weather) {
+    DisplayLockGuard lock(this);
+    weather_ = weather;
+    if (setup_ui_called_) {
+        ui_.SetWeather(weather_);
+    }
 }
 
 void JotapeDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {

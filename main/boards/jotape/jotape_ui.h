@@ -11,6 +11,7 @@
 
 #include <ctime>
 #include <functional>
+#include <string>
 
 enum class JotapeScreen {
     kBoot,       // Splash shown at power-on
@@ -19,6 +20,7 @@ enum class JotapeScreen {
     kMenu,       // Functions list
     kListening,  // Listening to the user
     kSpeaking,   // JOTAPE talking
+    kWeather,    // Current weather
 };
 
 enum class JotapeMenuItem {
@@ -29,6 +31,19 @@ enum class JotapeMenuItem {
     kNews,
     kSettings,
     kCount,
+};
+
+// Weather shown on the weather screen (filled by the board).
+struct JotapeWeatherView {
+    bool valid = false;
+    std::string city;
+    std::string status;       // shown when !valid
+    std::string description;  // e.g. "Parcialmente nublado"
+    int temperature = 0;
+    int temp_max = 0;
+    int temp_min = 0;
+    int weather_code = 0;  // WMO code
+    bool is_day = true;
 };
 
 enum class JotapeFaceSize { kSmall, kBig, kXL };
@@ -99,6 +114,7 @@ public:
     void SetEmotion(const char* emotion);
     void ShowToast(const char* text, uint32_t duration_ms);
     void SetSubtitleHidden(bool hidden);
+    void SetWeather(const JotapeWeatherView& weather);
 
     // Called every second to refresh the clock; return false if the time is
     // not known yet.
@@ -134,6 +150,7 @@ private:
     void CreateMenu();
     void CreateListening();
     void CreateSpeaking();
+    void CreateWeather();
 
     void ApplyScreen(JotapeScreen screen);
     void SelectMenuRow(int index);
@@ -148,7 +165,7 @@ private:
     static void GestureCb(lv_event_t* e);
 
     lv_obj_t* screen_ = nullptr;
-    lv_obj_t* panels_[6] = {};
+    lv_obj_t* panels_[7] = {};
     JotapeScreen current_ = JotapeScreen::kBoot;
     JotapeScreen pending_ = JotapeScreen::kBoot;
     bool boot_hold_ = true;
@@ -170,6 +187,12 @@ private:
     lv_obj_t* terminal_status_ = nullptr;
     lv_obj_t* terminal_message_ = nullptr;
     lv_obj_t* date_label_ = nullptr;
+    lv_obj_t* weather_city_ = nullptr;
+    lv_obj_t* weather_icon_ = nullptr;
+    lv_obj_t* weather_temp_ = nullptr;
+    lv_obj_t* weather_range_ = nullptr;
+    lv_obj_t* weather_desc_ = nullptr;
+    static void WeatherClickCb(lv_event_t* e);
     lv_obj_t* clock_label_ = nullptr;
     lv_obj_t* network_label_ = nullptr;
     lv_obj_t* battery_label_ = nullptr;

@@ -4,6 +4,7 @@
 #include "jotape_audio_codec.h"
 #include "jotape_display.h"
 #include "jotape_motion.h"
+#include "jotape_weather.h"
 
 #include <algorithm>
 #include <atomic>
@@ -360,8 +361,50 @@ private:
     }
 
     // 初始化工具
+    void InitializeWeather() {
+        auto display = static_cast<JotapeDisplay*>(display_);
+        JotapeWeather::GetInstance().Start([display](const JotapeWeatherData& data) {
+            JotapeWeatherView view;
+            view.valid = data.valid;
+            view.city = data.city;
+            view.status = data.status;
+            view.description = JotapeWeather::Describe(data.weather_code);
+            view.temperature = data.temperature;
+            view.temp_max = data.temp_max;
+            view.temp_min = data.temp_min;
+            view.weather_code = data.weather_code;
+            view.is_day = data.is_day;
+            display->SetWeather(view);
+        });
+    }
+
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
+        mcp_server.AddTool("self.weather.get_current",
+            "Get the current weather where JOTAPE is (city, temperature in Celsius, "
+            "today's max/min and conditions in Spanish). Use it when the user asks about the "
+            "weather or temperature.",
+            PropertyList(), [](const PropertyList& properties) -> ReturnValue {
+                auto data = JotapeWeather::GetInstance().Get();
+                if (!data.valid) {
+                    return std::string("Todavia no hay datos del clima (") + data.status + ")";
+                }
+                char text[200];
+                snprintf(text, sizeof(text), "%s: %d C, %s. Maxima %d C, minima %d C.",
+                         data.city.c_str(), data.temperature,
+                         JotapeWeather::Describe(data.weather_code), data.temp_max, data.temp_min);
+                return std::string(text);
+            });
+        mcp_server.AddTool("self.weather.set_city",
+            "Change the city used for the weather. Pass a city name (e.g. 'Cordoba, Argentina'), "
+            "or 'auto' to go back to the automatic location from the internet connection. "
+            "The new weather is ready a few seconds later; then call self.weather.get_current.",
+            PropertyList({Property("city", kPropertyTypeString)}),
+            [](const PropertyList& properties) -> ReturnValue {
+                auto city = properties["city"].value<std::string>();
+                JotapeWeather::GetInstance().RequestCity(city);
+                return std::string("Buscando el clima de ") + city + "...";
+            });
         mcp_server.AddTool("self.system.reconfigure_wifi",
             "Reboot the device and enter WiFi configuration mode.\n"
             "**CAUTION** You must ask the user to confirm this action.",
@@ -385,6 +428,7 @@ public:
         InitializeButtons();
         InitializeTools();
         InitializeRotation();
+        InitializeWeather();
         static_cast<JotapeDisplay*>(display_)->SetSoundLevelProvider([this]() {
             JotapeAudioCodec* codec = codec_.load();
             if (codec == nullptr) {

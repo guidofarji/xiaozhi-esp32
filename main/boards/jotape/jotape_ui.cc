@@ -11,6 +11,8 @@ LV_FONT_DECLARE(font_jotape_20);
 LV_FONT_DECLARE(font_jotape_30);
 LV_FONT_DECLARE(font_jotape_clock_80);
 LV_FONT_DECLARE(font_jotape_icons_22);
+LV_FONT_DECLARE(font_jotape_weather_64);
+LV_FONT_DECLARE(font_jotape_temp_64);
 
 namespace {
 
@@ -67,6 +69,50 @@ lv_obj_t* Rect(lv_obj_t* parent, int x, int y, int w, int h, lv_color_t color) {
 }
 
 bool Is(const char* a, const char* b) { return strcmp(a, b) == 0; }
+
+// Uppercase for ASCII and Latin-1 letters encoded in UTF-8 (á -> Á, ñ -> Ñ).
+std::string Upper(const std::string& text) {
+    std::string out = text;
+    for (size_t i = 0; i < out.size(); i++) {
+        unsigned char c = out[i];
+        if (c >= 'a' && c <= 'z') {
+            out[i] = static_cast<char>(c - 32);
+        } else if (c == 0xC3 && i + 1 < out.size()) {
+            unsigned char n = out[i + 1];
+            if (n >= 0xA0 && n <= 0xBE && n != 0xB7) {
+                out[i + 1] = static_cast<char>(n - 0x20);
+            }
+            i++;
+        }
+    }
+    return out;
+}
+
+// Material Symbols glyph for a WMO weather code.
+const char* WeatherIcon(int code, bool is_day) {
+    if (code == 0 || code == 1) {
+        return is_day ? "\xEE\xA0\x9A" : "\xEE\x94\x9C";  // sunny / dark_mode
+    }
+    if (code == 2) {
+        return is_day ? "\xEF\x85\xB2" : "\xEE\xA9\x86";  // partly cloudy day / night
+    }
+    if (code == 45 || code == 48) {
+        return "\xEE\xA0\x98";  // foggy
+    }
+    if (code >= 51 && code <= 67) {
+        return code == 65 || code == 67 ? "\xEF\x98\x9F" : "\xEF\x85\xB6";  // rainy
+    }
+    if ((code >= 71 && code <= 77) || code == 85 || code == 86) {
+        return "\xEE\x8B\x8D";  // snowy
+    }
+    if (code >= 80 && code <= 82) {
+        return "\xEF\x85\xB6";  // rainy
+    }
+    if (code >= 95) {
+        return "\xEE\xAF\x9B";  // thunderstorm
+    }
+    return "\xEE\x8A\xBD";  // cloud
+}
 
 // True once `now` has reached `deadline` (wrap-around safe).
 bool Reached(uint32_t now, uint32_t deadline) { return static_cast<int32_t>(now - deadline) >= 0; }
@@ -384,6 +430,7 @@ void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
     CreateMenu();
     CreateListening();
     CreateSpeaking();
+    CreateWeather();
 
     // Toast on top of every panel
     toast_ = Decor(screen_);
@@ -577,6 +624,80 @@ void JotapeUi::CreateSpeaking() {
     CreateWave(p, speak_wave_, Green());
 }
 
+void JotapeUi::CreateWeather() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kWeather)] = NewPanel(screen_);
+    lv_obj_add_event_cb(p, WeatherClickCb, LV_EVENT_CLICKED, this);
+
+    lv_obj_t* header = Decor(p);
+    lv_obj_set_size(header, 216, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(header, 8, 0);
+    lv_obj_set_pos(header, 12, 6);
+    NewLabel(header, &font30_, Orange(), "CLIMA");
+    weather_city_ = NewLabel(header, &font30_, Green(), "");
+    lv_obj_set_flex_grow(weather_city_, 1);
+    lv_obj_set_height(weather_city_, font_jotape_30.line_height);
+    lv_label_set_long_mode(weather_city_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    Rect(p, 12, 42, 216, 2, DimGreen());
+
+    weather_icon_ = NewLabel(p, &font_jotape_weather_64, Green(), "");
+    lv_obj_set_pos(weather_icon_, 16, 52);
+    weather_temp_ = NewLabel(p, &font_jotape_temp_64, Green(),
+                             "--\xC2\xB0"
+                             "C");
+    lv_obj_align(weather_temp_, LV_ALIGN_TOP_RIGHT, -14, 56);
+
+    weather_range_ = NewLabel(p, &font20_, Green(), "");
+    lv_obj_align(weather_range_, LV_ALIGN_TOP_MID, 0, 136);
+    Rect(p, 12, 166, 216, 2, DimGreen());
+
+    weather_desc_ = NewLabel(p, &font20_, Green(), "BUSCANDO UBICACIÓN...");
+    lv_obj_set_width(weather_desc_, 216);
+    lv_label_set_long_mode(weather_desc_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(weather_desc_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(weather_desc_, 12, 178);
+}
+
+void JotapeUi::SetWeather(const JotapeWeatherView& weather) {
+    if (weather_city_ == nullptr) {
+        return;
+    }
+    if (weather.city.empty()) {
+        lv_label_set_text(weather_city_, "");
+    } else {
+        lv_label_set_text(weather_city_, ("\xC2\xB7 " + Upper(weather.city)).c_str());
+    }
+    if (!weather.valid) {
+        lv_label_set_text(weather_icon_, "");
+        lv_label_set_text(weather_temp_,
+                          "--\xC2\xB0"
+                          "C");
+        lv_label_set_text(weather_range_, "");
+        lv_label_set_text(weather_desc_, Upper(weather.status).c_str());
+        return;
+    }
+    lv_label_set_text(weather_icon_, WeatherIcon(weather.weather_code, weather.is_day));
+    const bool sunny = weather.weather_code <= 1 && weather.is_day;
+    lv_obj_set_style_text_color(weather_icon_, sunny ? Yellow() : Green(), 0);
+    lv_label_set_text_fmt(weather_temp_,
+                          "%d\xC2\xB0"
+                          "C",
+                          weather.temperature);
+    lv_label_set_text_fmt(weather_range_,
+                          "MÁX %d\xC2\xB0"
+                          "C / MÍN %d\xC2\xB0"
+                          "C",
+                          weather.temp_max, weather.temp_min);
+    lv_label_set_text(weather_desc_, Upper(weather.description).c_str());
+}
+
+void JotapeUi::WeatherClickCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    if (self->current_ == JotapeScreen::kWeather) {
+        self->Show(JotapeScreen::kHome);
+    }
+}
+
 void JotapeUi::Show(JotapeScreen screen) {
     pending_ = screen;
     if (boot_hold_) {
@@ -603,8 +724,10 @@ void JotapeUi::ApplyScreen(JotapeScreen screen) {
     HideWave(listen_wave_);
     HideWave(speak_wave_);
 
-    if (screen == JotapeScreen::kMenu) {
+    if (screen == JotapeScreen::kMenu || screen == JotapeScreen::kWeather) {
         menu_touched_ = lv_tick_get();
+    }
+    if (screen == JotapeScreen::kMenu) {
         SelectMenuRow(0);
     } else if (screen == JotapeScreen::kHome) {
         last_clock_min_ = -1;
@@ -742,7 +865,8 @@ void JotapeUi::OnTimer() {
         lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
     }
 
-    if (current_ == JotapeScreen::kMenu && lv_tick_diff(now, menu_touched_) >= kMenuTimeoutMs) {
+    if ((current_ == JotapeScreen::kMenu || current_ == JotapeScreen::kWeather) &&
+        lv_tick_diff(now, menu_touched_) >= kMenuTimeoutMs) {
         Show(JotapeScreen::kHome);
     }
 
@@ -833,6 +957,8 @@ void JotapeUi::MenuRowCb(lv_event_t* e) {
     auto item = static_cast<JotapeMenuItem>(index);
     if (item == JotapeMenuItem::kClock) {
         self->Show(JotapeScreen::kHome);
+    } else if (item == JotapeMenuItem::kWeather) {
+        self->Show(JotapeScreen::kWeather);
     } else if (self->on_menu_item) {
         self->on_menu_item(item);
     } else {
@@ -851,5 +977,7 @@ void JotapeUi::GestureCb(lv_event_t* e) {
         self->Show(JotapeScreen::kMenu);
     } else if (self->current_ == JotapeScreen::kMenu && dir == LV_DIR_RIGHT) {
         self->Show(JotapeScreen::kHome);
+    } else if (self->current_ == JotapeScreen::kWeather && dir == LV_DIR_RIGHT) {
+        self->Show(JotapeScreen::kMenu);
     }
 }

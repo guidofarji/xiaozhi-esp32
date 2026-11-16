@@ -5,6 +5,19 @@ Board propia basada en `waveshare/esp32-s3-touch-lcd-1.54`
 audio ES8311 + ES7210). El hardware y los pines son idénticos a la board
 de Waveshare; ver `config.h`.
 
+## Clima
+
+`jotape_weather.*` consulta Open-Meteo (gratis, sin clave) en una tarea en
+segundo plano cada 30 minutos. La ubicación sale de la IP (ip-api.com),
+salvo que se elija una ciudad por voz: queda guardada en NVS (`jotape`:
+`w_city`, `w_lat`, `w_lon`). Herramientas de voz (MCP):
+
+- `self.weather.get_current`: clima actual para responder por voz.
+- `self.weather.set_city`: cambia la ciudad (`auto` = volver a la ubicación automática).
+
+La pantalla CLIMA se abre desde el menú; se vuelve tocando la pantalla,
+deslizando a la derecha o esperando 20 s.
+
 ## Orientación automática
 
 La IMU QMI8658 (`jotape_motion.*`) se usa para girar la pantalla y que la

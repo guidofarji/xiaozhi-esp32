@@ -27,6 +27,8 @@ public:
 
     // Loudness 0..100 used to animate the sound wave (called from the UI task).
     void SetSoundLevelProvider(std::function<int()> provider);
+    // Updates the weather screen (any task).
+    void SetWeather(const JotapeWeatherView& weather);
 
 private:
     JotapeUi::Fonts CurrentFonts() const;
@@ -34,6 +36,7 @@ private:
 
     JotapeUi ui_;
     std::function<int()> sound_level_;
+    JotapeWeatherView weather_;
 };
 
 #endif  // JOTAPE_DISPLAY_H
