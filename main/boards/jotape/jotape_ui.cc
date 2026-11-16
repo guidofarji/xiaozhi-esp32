@@ -18,7 +18,7 @@ constexpr int kWidth = 240;
 constexpr int kHeight = 240;
 constexpr uint32_t kBootHoldMs = 2500;
 constexpr uint32_t kMenuTimeoutMs = 20000;
-constexpr uint32_t kTimerPeriodMs = 100;
+constexpr uint32_t kTimerPeriodMs = 50;
 
 // Material Symbols glyphs in font_jotape_icons_22
 #define ICON_MIC "\xEE\x80\xA9"        // U+E029 mic
@@ -523,17 +523,27 @@ void JotapeUi::CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color) {
         const int x = i < 5 ? 12 + i * 6 : 198 + (i - 5) * 6;
         bars[i] = Rect(parent, x, kHeight / 2 - 4, 3, 8, color);
         lv_obj_set_style_radius(bars[i], 1, 0);
+        lv_obj_add_flag(bars[i], LV_OBJ_FLAG_HIDDEN);  // only shown with sound
     }
 }
 
-void JotapeUi::UpdateWave(lv_obj_t** bars) {
+void JotapeUi::UpdateWave(lv_obj_t** bars, int level) {
     for (int i = 0; i < 10; i++) {
-        // Taller towards the head, like a sound wave
+        // Taller towards the head, like a sound wave; scaled by loudness
         const int idx = i < 5 ? i : 9 - i;
-        const int max_h = 20 + idx * 10;
-        const int h = 6 + Random() % max_h;
+        const int max_h = (20 + idx * 10) * level / 100;
+        const int h = 4 + (max_h > 0 ? static_cast<int>(Random() % (max_h + 1)) : 0);
         lv_obj_set_height(bars[i], h);
         lv_obj_set_y(bars[i], kHeight / 2 - h / 2);
+        lv_obj_remove_flag(bars[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void JotapeUi::HideWave(lv_obj_t** bars) {
+    for (int i = 0; i < 10; i++) {
+        if (!lv_obj_has_flag(bars[i], LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(bars[i], LV_OBJ_FLAG_HIDDEN);
+        }
     }
 }
 
@@ -589,6 +599,9 @@ void JotapeUi::ApplyScreen(JotapeScreen screen) {
         speak_face_.SetTalkLevel(-1);
     }
     current_ = screen;
+    wave_level_ = 0;
+    HideWave(listen_wave_);
+    HideWave(speak_wave_);
 
     if (screen == JotapeScreen::kMenu) {
         menu_touched_ = lv_tick_get();
@@ -733,7 +746,7 @@ void JotapeUi::OnTimer() {
         Show(JotapeScreen::kHome);
     }
 
-    if (current_ == JotapeScreen::kHome && tick_count_ % 10 == 0) {
+    if (current_ == JotapeScreen::kHome && tick_count_ % 20 == 0) {
         RefreshClock();
     }
 
@@ -763,11 +776,26 @@ void JotapeUi::OnTimer() {
         }
     }
 
-    if (current_ == JotapeScreen::kListening) {
-        UpdateWave(listen_wave_);
-    } else if (current_ == JotapeScreen::kSpeaking) {
-        UpdateWave(speak_wave_);
-        speak_face_.SetTalkLevel(Random() % 101);
+    if (current_ == JotapeScreen::kListening || current_ == JotapeScreen::kSpeaking) {
+        const int target = sound_level ? sound_level() : 0;
+        // Grow quickly when sound starts, fade out gently in silence
+        if (target > wave_level_) {
+            wave_level_ += (target - wave_level_ + 1) * 6 / 10;
+        } else {
+            wave_level_ -= (wave_level_ - target + 3) / 4;
+        }
+        wave_level_ = LV_CLAMP(0, wave_level_, 100);
+        lv_obj_t** bars = current_ == JotapeScreen::kListening ? listen_wave_ : speak_wave_;
+        if (wave_level_ < 5) {
+            HideWave(bars);
+        } else {
+            UpdateWave(bars, wave_level_);
+        }
+        if (current_ == JotapeScreen::kSpeaking) {
+            // Eyes pulse only while sound is actually coming out
+            speak_face_.SetTalkLevel(
+                wave_level_ < 5 ? -1 : static_cast<int>(Random() % (wave_level_ + 1)));
+        }
     }
 }
 

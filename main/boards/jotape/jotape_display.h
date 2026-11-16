@@ -4,6 +4,8 @@
 #include "display/lcd_display.h"
 #include "jotape_ui.h"
 
+#include <functional>
+
 // SPI LCD display that replaces the stock layout with the JOTAPE terminal UI.
 class JotapeDisplay : public SpiLcdDisplay {
 public:
@@ -23,11 +25,15 @@ public:
     void SetHideSubtitle(bool hide) override;
     void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
 
+    // Loudness 0..100 used to animate the sound wave (called from the UI task).
+    void SetSoundLevelProvider(std::function<int()> provider);
+
 private:
     JotapeUi::Fonts CurrentFonts() const;
     void SyncScreen();
 
     JotapeUi ui_;
+    std::function<int()> sound_level_;
 };
 
 #endif  // JOTAPE_DISPLAY_H

@@ -43,6 +43,7 @@ void JotapeDisplay::SetupUI() {
         localtime_r(&now, out);
         return out->tm_year >= 2025 - 1900;
     };
+    ui_.sound_level = sound_level_;
     ui_.Create(lv_screen_active(), CurrentFonts());
 
     // The base class updates these icons from UpdateStatusBar().
@@ -140,6 +141,12 @@ void JotapeDisplay::SetTheme(Theme* theme) {
 void JotapeDisplay::SetHideSubtitle(bool hide) {
     DisplayLockGuard lock(this);
     ui_.SetSubtitleHidden(hide);
+}
+
+void JotapeDisplay::SetSoundLevelProvider(std::function<int()> provider) {
+    DisplayLockGuard lock(this);
+    sound_level_ = provider;
+    ui_.sound_level = provider;
 }
 
 void JotapeDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {

@@ -30,7 +30,9 @@ interfaz estilo terminal retro (`jotape_ui.*`, solo LVGL):
 | Escuchando | Cabeza flotando + onda de audio naranja |
 | Hablando | Cabeza flotando + onda de audio verde, sin subtítulos |
 
-La onda de audio es una animación: no sigue el volumen real del micrófono.
+La onda de audio sigue el sonido real (`jotape_audio_codec.h` mide el
+volumen del micrófono y del parlante): al escuchar aparece solo cuando se
+detecta voz, al hablar solo cuando sale sonido, y en silencio desaparece.
 
 Desde el menú se vuelve deslizando a la derecha, tocando "HORA Y FECHA" o
 esperando 20 s. Las demás funciones muestran "PRÓXIMAMENTE".

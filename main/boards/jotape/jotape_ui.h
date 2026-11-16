@@ -105,6 +105,9 @@ public:
     std::function<bool(struct tm*)> time_provider;
     // Called when a menu entry is tapped (except kClock, handled internally).
     std::function<void(JotapeMenuItem)> on_menu_item;
+    // Current loudness 0..100 of the voice being heard or spoken (0 = silence).
+    // The sound wave only shows while this is above a small threshold.
+    std::function<int()> sound_level;
 
     lv_obj_t* network_label() const { return network_label_; }
     lv_obj_t* battery_label() const { return battery_label_; }
@@ -121,7 +124,8 @@ private:
     void AddFrame(lv_obj_t* parent, int x, int y, int w, int h, bool green_border);
     void AddBracket(lv_obj_t* parent, int x, int y, bool right, bool bottom, int len);
     void CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color);
-    void UpdateWave(lv_obj_t** bars);
+    void UpdateWave(lv_obj_t** bars, int level);
+    void HideWave(lv_obj_t** bars);
     static void AddFloat(lv_obj_t* obj, int base_y, int amplitude, uint32_t period_ms);
 
     void CreateBoot();
@@ -185,6 +189,7 @@ private:
     uint32_t blink_end_ = 0;
     int last_clock_min_ = -1;
     uint32_t rng_ = 0x4A07A9E1;
+    int wave_level_ = 0;  // smoothed sound level shown by the wave
     lv_timer_t* timer_ = nullptr;
 };
 

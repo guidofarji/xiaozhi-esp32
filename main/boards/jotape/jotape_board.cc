@@ -1,10 +1,12 @@
 #include "wifi_board.h"
 #include "codecs/box_audio_codec.h"
 #include "display/lcd_display.h"
+#include "jotape_audio_codec.h"
 #include "jotape_display.h"
 #include "jotape_motion.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -66,6 +68,7 @@ private:
     i2c_master_bus_handle_t i2c_bus_;
     esp_lcd_panel_handle_t panel_ = nullptr;
     esp_lcd_touch_handle_t touch_ = nullptr;
+    std::atomic<JotapeAudioCodec*> codec_{nullptr};
     int rotation_ = -1;
 
     // Rotates the UI (panel scan direction + LVGL coordinates + touch).
@@ -382,11 +385,29 @@ public:
         InitializeButtons();
         InitializeTools();
         InitializeRotation();
+        static_cast<JotapeDisplay*>(display_)->SetSoundLevelProvider([this]() {
+            JotapeAudioCodec* codec = codec_.load();
+            if (codec == nullptr) {
+                return 0;
+            }
+            auto& app = Application::GetInstance();
+            switch (app.GetDeviceState()) {
+                case kDeviceStateListening:
+                    // Only react to speech, not background noise.
+                    return app.GetAudioService().IsVoiceDetected()
+                               ? std::max(30, codec->input_level())
+                               : 0;
+                case kDeviceStateSpeaking:
+                    return codec->output_level();
+                default:
+                    return 0;
+            }
+        });
         GetBacklight()->RestoreBrightness();
     }
 
     virtual AudioCodec* GetAudioCodec() override {
-       static BoxAudioCodec audio_codec(
+       static JotapeAudioCodec audio_codec(
             i2c_bus_, 
             AUDIO_INPUT_SAMPLE_RATE, 
             AUDIO_OUTPUT_SAMPLE_RATE,
@@ -399,6 +420,7 @@ public:
             AUDIO_CODEC_ES8311_ADDR, 
             AUDIO_CODEC_ES7210_ADDR, 
             true);
+        codec_.store(&audio_codec);
         return &audio_codec;
     }
 
