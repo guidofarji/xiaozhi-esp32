@@ -29,6 +29,10 @@ public:
     void SetSoundLevelProvider(std::function<int()> provider);
     // Updates the weather screen (any task).
     void SetWeather(const JotapeWeatherView& weather);
+    // Updates alarm/timer screens; shows the ringing screen while idle.
+    void SetAlarms(const JotapeAlarmsView& alarms);
+    void SetAlarmActions(std::function<void(int)> timer_start, std::function<void()> timer_cancel,
+                         std::function<void()> ring_stop);
 
 private:
     JotapeUi::Fonts CurrentFonts() const;
@@ -37,6 +41,7 @@ private:
     JotapeUi ui_;
     std::function<int()> sound_level_;
     JotapeWeatherView weather_;
+    JotapeAlarmsView alarms_;
 };
 
 #endif  // JOTAPE_DISPLAY_H

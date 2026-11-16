@@ -12,6 +12,7 @@
 #include <ctime>
 #include <functional>
 #include <string>
+#include <vector>
 
 enum class JotapeScreen {
     kBoot,       // Splash shown at power-on
@@ -21,6 +22,9 @@ enum class JotapeScreen {
     kListening,  // Listening to the user
     kSpeaking,   // JOTAPE talking
     kWeather,    // Current weather
+    kAlarms,     // Alarm list
+    kTimer,      // Countdown timer
+    kRinging,    // An alarm or the timer is ringing
 };
 
 enum class JotapeMenuItem {
@@ -44,6 +48,25 @@ struct JotapeWeatherView {
     int temp_min = 0;
     int weather_code = 0;  // WMO code
     bool is_day = true;
+};
+
+struct JotapeAlarmItemView {
+    std::string time;    // "07:30"
+    std::string repeat;  // "LUN-VIE"
+    std::string label;
+};
+
+struct JotapeAlarmsView {
+    std::vector<JotapeAlarmItemView> alarms;
+    std::string next_alarm;  // "07:30" or empty
+    bool timer_active = false;
+    int timer_remaining_s = 0;
+    int timer_total_s = 0;
+    std::string timer_label;
+    bool ringing = false;
+    bool ringing_timer = false;
+    std::string ring_title;
+    std::string ring_label;
 };
 
 enum class JotapeFaceSize { kSmall, kBig, kXL };
@@ -115,6 +138,7 @@ public:
     void ShowToast(const char* text, uint32_t duration_ms);
     void SetSubtitleHidden(bool hidden);
     void SetWeather(const JotapeWeatherView& weather);
+    void SetAlarms(const JotapeAlarmsView& alarms);
 
     // Called every second to refresh the clock; return false if the time is
     // not known yet.
@@ -124,6 +148,10 @@ public:
     // Current loudness 0..100 of the voice being heard or spoken (0 = silence).
     // The sound wave only shows while this is above a small threshold.
     std::function<int()> sound_level;
+    // Touch actions on the timer and ringing screens.
+    std::function<void(int seconds)> on_timer_start;
+    std::function<void()> on_timer_cancel;
+    std::function<void()> on_ring_stop;
 
     lv_obj_t* network_label() const { return network_label_; }
     lv_obj_t* battery_label() const { return battery_label_; }
@@ -151,6 +179,10 @@ private:
     void CreateListening();
     void CreateSpeaking();
     void CreateWeather();
+    void CreateAlarms();
+    void CreateTimer();
+    void CreateRinging();
+    lv_obj_t* NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h);
 
     void ApplyScreen(JotapeScreen screen);
     void SelectMenuRow(int index);
@@ -165,7 +197,7 @@ private:
     static void GestureCb(lv_event_t* e);
 
     lv_obj_t* screen_ = nullptr;
-    lv_obj_t* panels_[7] = {};
+    lv_obj_t* panels_[10] = {};
     JotapeScreen current_ = JotapeScreen::kBoot;
     JotapeScreen pending_ = JotapeScreen::kBoot;
     bool boot_hold_ = true;
@@ -193,6 +225,24 @@ private:
     lv_obj_t* weather_range_ = nullptr;
     lv_obj_t* weather_desc_ = nullptr;
     static void WeatherClickCb(lv_event_t* e);
+    static void TimerButtonCb(lv_event_t* e);
+    static void RingClickCb(lv_event_t* e);
+
+    JotapeAlarmsView alarms_view_;
+    lv_obj_t* home_info_ = nullptr;
+    lv_obj_t* home_info_icon_ = nullptr;
+    lv_obj_t* home_info_text_ = nullptr;
+    lv_obj_t* alarm_rows_[6] = {};
+    lv_obj_t* alarm_empty_ = nullptr;
+    lv_obj_t* timer_count_ = nullptr;
+    lv_obj_t* timer_bar_ = nullptr;
+    lv_obj_t* timer_text_ = nullptr;
+    lv_obj_t* timer_presets_[3] = {};
+    lv_obj_t* timer_cancel_ = nullptr;
+    lv_obj_t* ring_frame_ = nullptr;
+    lv_obj_t* ring_icon_ = nullptr;
+    lv_obj_t* ring_title_ = nullptr;
+    lv_obj_t* ring_label_ = nullptr;
     lv_obj_t* clock_label_ = nullptr;
     lv_obj_t* network_label_ = nullptr;
     lv_obj_t* battery_label_ = nullptr;

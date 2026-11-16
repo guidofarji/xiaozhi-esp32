@@ -18,6 +18,20 @@ salvo que se elija una ciudad por voz: queda guardada en NVS (`jotape`:
 La pantalla CLIMA se abre desde el menú; se vuelve tocando la pantalla,
 deslizando a la derecha o esperando 20 s.
 
+## Alarmas y temporizador
+
+`jotape_alarms.*` guarda hasta 8 alarmas en NVS (`jotape`: `alarms`) y un
+temporizador, revisados por una tarea propia. Al sonar se muestra la
+pantalla de aviso (borde titilando) y suena `exclamation` cada 2,5 s
+durante un minuto, solo mientras JOTAPE está en espera. Se apaga tocando la
+pantalla, con un clic del botón de encendido o por voz.
+
+Herramientas de voz: `self.alarm.set`, `self.alarm.list`,
+`self.alarm.delete`, `self.alarm.stop`, `self.timer.start`,
+`self.timer.cancel`, `self.timer.status`. La pantalla TEMPORIZADOR tiene
+botones de 1, 5 y 10 minutos y CANCELAR. En el reloj aparece la próxima
+alarma o la cuenta regresiva del temporizador.
+
 ## Orientación automática
 
 La IMU QMI8658 (`jotape_motion.*`) se usa para girar la pantalla y que la

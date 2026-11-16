@@ -1,6 +1,7 @@
 #include "wifi_board.h"
 #include "codecs/box_audio_codec.h"
 #include "display/lcd_display.h"
+#include "jotape_alarms.h"
 #include "jotape_audio_codec.h"
 #include "jotape_display.h"
 #include "jotape_motion.h"
@@ -288,6 +289,9 @@ private:
 
         pwr_button_.OnPressUp([this]() {
             pwr_button_.OnClick([this]() {
+                if (JotapeAlarms::GetInstance().StopRinging()) {
+                    return;  // the click only silences the alarm
+                }
                 auto& app = Application::GetInstance();
                 app.ToggleChatState();
             });
@@ -378,8 +382,123 @@ private:
         });
     }
 
+    void InitializeAlarms() {
+        auto display = static_cast<JotapeDisplay*>(display_);
+        auto& alarms = JotapeAlarms::GetInstance();
+        display->SetAlarmActions(
+            [](int seconds) { JotapeAlarms::GetInstance().StartTimer(seconds, ""); },
+            []() { JotapeAlarms::GetInstance().CancelTimer(); },
+            []() { JotapeAlarms::GetInstance().StopRinging(); });
+        alarms.Start(
+            [display](const JotapeAlarmState& state) {
+                JotapeAlarmsView view;
+                for (const auto& a : state.alarms) {
+                    char time_text[8];
+                    snprintf(time_text, sizeof(time_text), "%02d:%02d", a.hour, a.minute);
+                    view.alarms.push_back({time_text, JotapeAlarms::RepeatText(a.days), a.label});
+                }
+                view.next_alarm = state.next_alarm;
+                view.timer_active = state.timer_active;
+                view.timer_remaining_s = state.timer_remaining_s;
+                view.timer_total_s = state.timer_total_s;
+                view.timer_label = state.timer_label;
+                view.ringing = state.ringing;
+                view.ringing_timer = state.ringing_timer;
+                view.ring_title = state.ring_title;
+                view.ring_label = state.ring_label;
+                display->SetAlarms(view);
+            },
+            [this]() {
+                // Turn the screen back on so the alarm can be seen.
+                if (power_save_timer_ != nullptr) {
+                    power_save_timer_->WakeUp();
+                }
+            });
+    }
+
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
+        mcp_server.AddTool("self.alarm.set",
+            "Set an alarm on JOTAPE. time is 24h \"HH:MM\" local time. repeat is one of "
+            "\"once\", \"daily\", \"weekdays\" (Mon-Fri) or \"weekends\". label is optional "
+            "(e.g. \"trabajo\"). For a countdown like 'in 10 minutes' use self.timer.start instead.",
+            PropertyList({Property("time", kPropertyTypeString),
+                          Property("repeat", kPropertyTypeString, std::string("once")),
+                          Property("label", kPropertyTypeString, std::string(""))}),
+            [](const PropertyList& properties) -> ReturnValue {
+                auto time_text = properties["time"].value<std::string>();
+                int hour = -1, minute = -1;
+                if (sscanf(time_text.c_str(), "%d:%d", &hour, &minute) != 2) {
+                    return std::string("Formato de hora invalido, usar HH:MM");
+                }
+                std::string error;
+                int id = JotapeAlarms::GetInstance().AddAlarm(
+                    hour, minute, JotapeAlarms::ParseRepeat(properties["repeat"].value<std::string>()),
+                    properties["label"].value<std::string>(), error);
+                if (id < 0) {
+                    return error;
+                }
+                char text[80];
+                snprintf(text, sizeof(text), "Alarma %d puesta a las %02d:%02d", id, hour, minute);
+                return std::string(text);
+            });
+        mcp_server.AddTool("self.alarm.list",
+            "List the alarms set on JOTAPE with their id, time, repeat and label.",
+            PropertyList(), [](const PropertyList& properties) -> ReturnValue {
+                auto state = JotapeAlarms::GetInstance().State();
+                if (state.alarms.empty()) {
+                    return std::string("No hay alarmas");
+                }
+                std::string text;
+                for (const auto& a : state.alarms) {
+                    char line[96];
+                    snprintf(line, sizeof(line), "id %d: %02d:%02d %s %s\n", a.id, a.hour, a.minute,
+                             JotapeAlarms::RepeatText(a.days).c_str(), a.label.c_str());
+                    text += line;
+                }
+                return text;
+            });
+        mcp_server.AddTool("self.alarm.delete",
+            "Delete one alarm by id (see self.alarm.list), or all alarms with id = 0.",
+            PropertyList({Property("id", kPropertyTypeInteger, 0, 1000)}),
+            [](const PropertyList& properties) -> ReturnValue {
+                int id = properties["id"].value<int>();
+                auto& alarms = JotapeAlarms::GetInstance();
+                if (id == 0) {
+                    return std::string("Alarmas borradas: ") + std::to_string(alarms.DeleteAll());
+                }
+                return std::string(alarms.DeleteAlarm(id) ? "Alarma borrada" : "No existe esa alarma");
+            });
+        mcp_server.AddTool("self.alarm.stop",
+            "Silence the alarm or finished timer that is ringing right now.",
+            PropertyList(), [](const PropertyList& properties) -> ReturnValue {
+                return std::string(JotapeAlarms::GetInstance().StopRinging() ? "Alarma apagada"
+                                                                             : "No hay nada sonando");
+            });
+        mcp_server.AddTool("self.timer.start",
+            "Start a countdown timer on JOTAPE (replaces a running one). Give the duration in "
+            "seconds (e.g. 10 minutes = 600). label is optional (e.g. \"pizza\").",
+            PropertyList({Property("seconds", kPropertyTypeInteger, 1, 86400),
+                          Property("label", kPropertyTypeString, std::string(""))}),
+            [](const PropertyList& properties) -> ReturnValue {
+                int seconds = properties["seconds"].value<int>();
+                JotapeAlarms::GetInstance().StartTimer(seconds,
+                                                       properties["label"].value<std::string>());
+                return std::string("Temporizador de ") + std::to_string(seconds) + " segundos en marcha";
+            });
+        mcp_server.AddTool("self.timer.cancel", "Cancel the running countdown timer.",
+            PropertyList(), [](const PropertyList& properties) -> ReturnValue {
+                return std::string(JotapeAlarms::GetInstance().CancelTimer() ? "Temporizador cancelado"
+                                                                            : "No habia temporizador");
+            });
+        mcp_server.AddTool("self.timer.status", "How much time is left on the countdown timer.",
+            PropertyList(), [](const PropertyList& properties) -> ReturnValue {
+                auto state = JotapeAlarms::GetInstance().State();
+                if (!state.timer_active) {
+                    return std::string("No hay temporizador en marcha");
+                }
+                return std::string("Faltan ") + std::to_string(state.timer_remaining_s) + " segundos";
+            });
         mcp_server.AddTool("self.weather.get_current",
             "Get the current weather where JOTAPE is (city, temperature in Celsius, "
             "today's max/min and conditions in Spanish). Use it when the user asks about the "
@@ -429,6 +548,7 @@ public:
         InitializeTools();
         InitializeRotation();
         InitializeWeather();
+        InitializeAlarms();
         static_cast<JotapeDisplay*>(display_)->SetSoundLevelProvider([this]() {
             JotapeAudioCodec* codec = codec_.load();
             if (codec == nullptr) {

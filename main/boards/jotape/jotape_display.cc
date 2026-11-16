@@ -46,6 +46,7 @@ void JotapeDisplay::SetupUI() {
     ui_.sound_level = sound_level_;
     ui_.Create(lv_screen_active(), CurrentFonts());
     ui_.SetWeather(weather_);
+    ui_.SetAlarms(alarms_);
 
     // The base class updates these icons from UpdateStatusBar().
     network_label_ = ui_.network_label();
@@ -55,11 +56,16 @@ void JotapeDisplay::SetupUI() {
 
 void JotapeDisplay::SyncScreen() {
     switch (Application::GetInstance().GetDeviceState()) {
-        case kDeviceStateIdle:
-            if (ui_.current() != JotapeScreen::kMenu && ui_.current() != JotapeScreen::kWeather) {
+        case kDeviceStateIdle: {
+            const auto current = ui_.current();
+            if (alarms_.ringing) {
+                ui_.Show(JotapeScreen::kRinging);
+            } else if (current != JotapeScreen::kMenu && current != JotapeScreen::kWeather &&
+                       current != JotapeScreen::kAlarms && current != JotapeScreen::kTimer) {
                 ui_.Show(JotapeScreen::kHome);
             }
             break;
+        }
         case kDeviceStateConnecting:
         case kDeviceStateListening:
             ui_.Show(JotapeScreen::kListening);
@@ -148,6 +154,24 @@ void JotapeDisplay::SetSoundLevelProvider(std::function<int()> provider) {
     DisplayLockGuard lock(this);
     sound_level_ = provider;
     ui_.sound_level = provider;
+}
+
+void JotapeDisplay::SetAlarms(const JotapeAlarmsView& alarms) {
+    DisplayLockGuard lock(this);
+    alarms_ = alarms;
+    if (setup_ui_called_) {
+        ui_.SetAlarms(alarms_);
+        SyncScreen();
+    }
+}
+
+void JotapeDisplay::SetAlarmActions(std::function<void(int)> timer_start,
+                                    std::function<void()> timer_cancel,
+                                    std::function<void()> ring_stop) {
+    DisplayLockGuard lock(this);
+    ui_.on_timer_start = timer_start;
+    ui_.on_timer_cancel = timer_cancel;
+    ui_.on_ring_stop = ring_stop;
 }
 
 void JotapeDisplay::SetWeather(const JotapeWeatherView& weather) {
