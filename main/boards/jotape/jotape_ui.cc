@@ -413,23 +413,71 @@ lv_obj_t* JotapeUi::Glass(lv_obj_t* parent, int x, int y, int w, int h, int radi
     lv_obj_set_style_bg_grad_dir(g, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(g, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(g, 1, 0);
-    lv_obj_set_style_border_opa(g, LV_OPA_40, 0);
+    lv_obj_set_style_border_opa(g, LV_OPA_50, 0);
     lv_obj_set_style_shadow_width(g, 14, 0);
     lv_obj_set_style_shadow_opa(g, LV_OPA_20, 0);
     TintGlass(g, tint);
 
     // Glass sheen: white highlight fading out over the top half
     lv_obj_t* sheen = Decor(g);
-    lv_obj_add_flag(sheen, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_add_flag(sheen, LV_OBJ_FLAG_FLOATING);
     lv_obj_set_pos(sheen, 0, 0);
     lv_obj_set_size(sheen, lv_pct(100), lv_pct(45));
     lv_obj_set_style_radius(sheen, radius > 1 ? radius - 1 : 0, 0);
     lv_obj_set_style_bg_color(sheen, lv_color_white(), 0);
     lv_obj_set_style_bg_grad_color(sheen, lv_color_white(), 0);
-    lv_obj_set_style_bg_main_opa(sheen, 26, 0);
+    lv_obj_set_style_bg_main_opa(sheen, 22, 0);
     lv_obj_set_style_bg_grad_opa(sheen, 0, 0);
     lv_obj_set_style_bg_grad_dir(sheen, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(sheen, LV_OPA_COVER, 0);
+
+    // Inner rim: a faint white edge just inside the border gives the pane
+    // thickness; brighter on the top/left where the light hits.
+    lv_obj_t* rim = Decor(g);
+    lv_obj_add_flag(rim, LV_OBJ_FLAG_FLOATING);
+    lv_obj_set_pos(rim, 0, 0);
+    lv_obj_set_size(rim, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_radius(rim, radius > 1 ? radius - 1 : 0, 0);
+    lv_obj_set_style_border_color(rim, lv_color_white(), 0);
+    lv_obj_set_style_border_width(rim, 1, 0);
+    lv_obj_set_style_border_opa(rim, 30, 0);
+    lv_obj_t* lit = Decor(g);
+    lv_obj_add_flag(lit, LV_OBJ_FLAG_FLOATING);
+    lv_obj_set_pos(lit, 1, 1);  // one pixel inside the border: a second, lit edge
+    lv_obj_set_size(lit, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_radius(lit, radius > 1 ? radius - 1 : 0, 0);
+    lv_obj_set_style_border_color(lit, lv_color_white(), 0);
+    lv_obj_set_style_border_width(lit, 1, 0);
+    lv_obj_set_style_border_opa(lit, 95, 0);
+    lv_obj_set_style_border_side(
+        lit, static_cast<lv_border_side_t>(LV_BORDER_SIDE_TOP | LV_BORDER_SIDE_LEFT), 0);
+
+    // Specular glint along the top edge, fading out to both sides
+    for (int side = 0; side < 2; side++) {
+        lv_obj_t* glint = Decor(g);
+        lv_obj_add_flag(glint, LV_OBJ_FLAG_FLOATING);
+        lv_obj_set_pos(glint, side == 0 ? lv_pct(12) : lv_pct(40), 0);
+        lv_obj_set_size(glint, lv_pct(side == 0 ? 28 : 40), 1);
+        lv_obj_set_style_bg_color(glint, lv_color_white(), 0);
+        lv_obj_set_style_bg_grad_color(glint, lv_color_white(), 0);
+        lv_obj_set_style_bg_main_opa(glint, side == 0 ? 0 : 230, 0);
+        lv_obj_set_style_bg_grad_opa(glint, side == 0 ? 230 : 0, 0);
+        lv_obj_set_style_bg_grad_dir(glint, LV_GRAD_DIR_HOR, 0);
+        lv_obj_set_style_bg_opa(glint, LV_OPA_COVER, 0);
+    }
+    // Soft reflection on the bottom edge (light passing through the pane)
+    for (int side = 0; side < 2; side++) {
+        lv_obj_t* glint = Decor(g);
+        lv_obj_add_flag(glint, LV_OBJ_FLAG_FLOATING);
+        lv_obj_set_size(glint, lv_pct(30), 1);
+        lv_obj_align(glint, LV_ALIGN_BOTTOM_LEFT, side == 0 ? lv_pct(20) : lv_pct(50), 0);
+        lv_obj_set_style_bg_color(glint, lv_color_white(), 0);
+        lv_obj_set_style_bg_grad_color(glint, lv_color_white(), 0);
+        lv_obj_set_style_bg_main_opa(glint, side == 0 ? 0 : 90, 0);
+        lv_obj_set_style_bg_grad_opa(glint, side == 0 ? 90 : 0, 0);
+        lv_obj_set_style_bg_grad_dir(glint, LV_GRAD_DIR_HOR, 0);
+        lv_obj_set_style_bg_opa(glint, LV_OPA_COVER, 0);
+    }
     return g;
 }
 
