@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 LV_FONT_DECLARE(font_jotape_20);
 LV_FONT_DECLARE(font_jotape_30);
@@ -400,18 +401,18 @@ void JotapeUi::CreateTerminal() {
     lv_obj_set_pos(title, 14, 8);
 
     terminal_status_ = NewLabel(p, &font20_, Orange(), "> INICIANDO...");
-    lv_obj_set_width(terminal_status_, 212);
-    lv_label_set_long_mode(terminal_status_, LV_LABEL_LONG_DOT);
+    lv_obj_set_size(terminal_status_, 212, 22);
+    lv_label_set_long_mode(terminal_status_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_pos(terminal_status_, 14, 40);
 
-    terminal_face_.Create(p, 76);
+    terminal_face_.Create(p, 56);
     lv_obj_align(terminal_face_.root(), LV_ALIGN_TOP_MID, 0, 66);
 
     terminal_message_ = NewLabel(p, &font20_, Green(), "");
-    lv_obj_set_size(terminal_message_, 212, 92);
+    lv_obj_set_size(terminal_message_, 216, 112);
     lv_label_set_long_mode(terminal_message_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(terminal_message_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(terminal_message_, 14, 136);
+    lv_obj_set_pos(terminal_message_, 12, 118);
 }
 
 void JotapeUi::CreateHome() {
@@ -589,7 +590,13 @@ void JotapeUi::SetMessage(const char* content) {
     if (terminal_message_ == nullptr) {
         return;
     }
-    const char* text = content != nullptr ? content : "";
+    // The pixel font has no full-width comma (used by some server/locale texts).
+    std::string normalized = content != nullptr ? content : "";
+    for (size_t pos = normalized.find("\xEF\xBC\x8C"); pos != std::string::npos;
+         pos = normalized.find("\xEF\xBC\x8C", pos)) {
+        normalized.replace(pos, 3, ", ");
+    }
+    const char* text = normalized.c_str();
     lv_label_set_text(terminal_message_, text);
     lv_label_set_text(subtitle_label_, text);
     if (text[0] == '\0' || subtitle_hidden_) {
