@@ -13,7 +13,7 @@ La IMU QMI8658 todavía no se inicializa.
 |---|---|
 | Placa | `CONFIG_BOARD_TYPE_JOTAPE` |
 | Idioma | Español (`CONFIG_LANGUAGE_ES_ES`) |
-| Wake word | "Jotape" vía MultiNet7 en inglés (`"ho tah pay"`, umbral 20) |
+| Wake word | "Jotape" vía MultiNet7 en inglés (`"ho tah pay"`, umbral 10) |
 | OTA | `https://api.tenclass.net/xiaozhi/ota/` (servidor oficial) |
 
 ## Compilar
