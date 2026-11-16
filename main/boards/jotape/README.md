@@ -7,6 +7,29 @@ de Waveshare; ver `config.h`.
 
 La IMU QMI8658 todavía no se inicializa.
 
+## Interfaz JOTAPE
+
+`JotapeDisplay` (`jotape_display.*`) reemplaza la pantalla estándar por una
+interfaz estilo terminal retro (`jotape_ui.*`, solo LVGL):
+
+| Pantalla | Cuándo aparece |
+|---|---|
+| Arranque | Al encender (2,5 s) |
+| Terminal | Conectando, configuración Wi-Fi, activación, actualización, errores |
+| Inicio (reloj) | En espera |
+| Funciones (menú) | Tocando la pantalla de inicio o deslizando a la izquierda |
+| Escuchando | Mientras te escucha |
+| Hablando | Mientras responde, con subtítulos |
+
+Desde el menú se vuelve deslizando a la derecha, tocando "HORA Y FECHA" o
+esperando 20 s. Las demás funciones muestran "PRÓXIMAMENTE".
+
+La cara del robot se dibuja con LVGL y cambia según la emoción que manda el
+servidor (contento, triste, sorprendido, pensando, enojado, dormido...).
+
+Fuentes generadas (`font_jotape_*.c`): VT323 y Material Symbols, ambas con
+licencia SIL OFL 1.1 (ver `fonts/`).
+
 ## Configuración fija (`sdkconfig.jotape`)
 
 | Opción | Valor |

@@ -1,0 +1,176 @@
+#ifndef JOTAPE_UI_H
+#define JOTAPE_UI_H
+
+// JOTAPE retro-terminal user interface.
+//
+// Pure LVGL: no ESP-IDF or application dependencies, so it can also be built
+// on a host machine to render preview screenshots. JotapeDisplay adapts it to
+// the firmware Display interface.
+
+#include <lvgl.h>
+
+#include <ctime>
+#include <functional>
+
+enum class JotapeScreen {
+    kBoot,       // Splash shown at power-on
+    kTerminal,   // Connecting, Wi-Fi setup, activation, upgrade, errors
+    kHome,       // Clock
+    kMenu,       // Functions list
+    kListening,  // Listening to the user
+    kSpeaking,   // JOTAPE talking
+};
+
+enum class JotapeMenuItem {
+    kClock = 0,
+    kWeather,
+    kAlarms,
+    kTimer,
+    kNews,
+    kSettings,
+    kCount,
+};
+
+class JotapeFace {
+public:
+    void Create(lv_obj_t* parent, int size);
+    lv_obj_t* root() const { return root_; }
+    void SetExpression(const char* emotion);
+    void SetEyesClosed(bool closed);
+    void SetMouthOpen(int percent);  // 0..100 while talking, -1 to stop
+    void SetBigEyes(bool big);
+
+private:
+    void ApplyEyes();
+    void ApplyMouth();
+
+    int size_ = 0;
+    lv_obj_t* root_ = nullptr;
+    lv_obj_t* eyes_[2] = {};
+    lv_obj_t* pupils_[2] = {};
+    lv_obj_t* glints_[2] = {};
+    lv_obj_t* mouth_ = nullptr;
+    lv_obj_t* grille_[2] = {};
+
+    // Current expression parameters (percent of the base eye/mouth size)
+    int eye_w_pct_ = 100;
+    int eye_h_pct_ = 100;
+    int eye_dy_ = 0;
+    int pupil_dx_ = 0;
+    int pupil_dy_ = 0;
+    int mouth_w_pct_ = 100;
+    int mouth_h_pct_ = 100;
+    bool closed_ = false;
+    bool sleepy_ = false;
+    bool big_eyes_ = false;
+    int talk_pct_ = -1;  // -1 = not talking
+};
+
+class JotapeUi {
+public:
+    struct Fonts {
+        // Fallback for characters the pixel font lacks (CJK, emoji...).
+        const lv_font_t* fallback_text = nullptr;
+        // Font used by the Wi-Fi / battery / mute status icons.
+        const lv_font_t* status_icons = nullptr;
+    };
+
+    void Create(lv_obj_t* screen, const Fonts& fonts);
+    void UpdateFonts(const Fonts& fonts);
+
+    // Requests a screen. While the boot splash is held, the request is
+    // applied once the splash time is over.
+    void Show(JotapeScreen screen);
+    JotapeScreen current() const { return current_; }
+
+    void SetStatus(const char* status);
+    void SetMessage(const char* content);
+    void SetEmotion(const char* emotion);
+    void ShowToast(const char* text, uint32_t duration_ms);
+    void SetSubtitleHidden(bool hidden);
+
+    // Called every second to refresh the clock; return false if the time is
+    // not known yet.
+    std::function<bool(struct tm*)> time_provider;
+    // Called when a menu entry is tapped (except kClock, handled internally).
+    std::function<void(JotapeMenuItem)> on_menu_item;
+
+    lv_obj_t* network_label() const { return network_label_; }
+    lv_obj_t* battery_label() const { return battery_label_; }
+    lv_obj_t* mute_label() const { return mute_label_; }
+
+    // Test hook: forces the boot splash to end now.
+    void EndBootHold();
+    // Test hook: advances animations by one step.
+    void Tick();
+
+private:
+    lv_obj_t* NewPanel(lv_obj_t* parent);
+    lv_obj_t* NewLabel(lv_obj_t* parent, const lv_font_t* font, lv_color_t color, const char* text);
+    void AddFrame(lv_obj_t* parent, int x, int y, int w, int h, bool green_border);
+    void AddBracket(lv_obj_t* parent, int x, int y, bool right, bool bottom, int len);
+
+    void CreateBoot();
+    void CreateTerminal();
+    void CreateHome();
+    void CreateMenu();
+    void CreateListening();
+    void CreateSpeaking();
+
+    void ApplyScreen(JotapeScreen screen);
+    void SelectMenuRow(int index);
+    void RefreshClock();
+    void OnTimer();
+    JotapeFace* ActiveFace();
+    uint32_t Random();
+
+    static void TimerCb(lv_timer_t* timer);
+    static void HomeClickCb(lv_event_t* e);
+    static void MenuRowCb(lv_event_t* e);
+    static void GestureCb(lv_event_t* e);
+
+    lv_obj_t* screen_ = nullptr;
+    lv_obj_t* panels_[6] = {};
+    JotapeScreen current_ = JotapeScreen::kBoot;
+    JotapeScreen pending_ = JotapeScreen::kBoot;
+    bool boot_hold_ = true;
+    uint32_t boot_started_ = 0;
+    uint32_t menu_touched_ = 0;
+    uint32_t tick_count_ = 0;
+    bool subtitle_hidden_ = false;
+
+    const lv_font_t* status_icon_font_ = nullptr;
+    lv_font_t font20_;
+    lv_font_t font30_;
+
+    JotapeFace boot_face_;
+    JotapeFace terminal_face_;
+    JotapeFace home_face_;
+    JotapeFace listen_face_;
+    JotapeFace speak_face_;
+
+    lv_obj_t* terminal_status_ = nullptr;
+    lv_obj_t* terminal_message_ = nullptr;
+    lv_obj_t* date_label_ = nullptr;
+    lv_obj_t* clock_label_ = nullptr;
+    lv_obj_t* network_label_ = nullptr;
+    lv_obj_t* battery_label_ = nullptr;
+    lv_obj_t* mute_label_ = nullptr;
+    lv_obj_t* menu_rows_[static_cast<int>(JotapeMenuItem::kCount)] = {};
+    lv_obj_t* menu_texts_[static_cast<int>(JotapeMenuItem::kCount)] = {};
+    lv_obj_t* menu_icons_[static_cast<int>(JotapeMenuItem::kCount)] = {};
+    int menu_selected_ = 0;
+    lv_obj_t* bars_[10] = {};
+    lv_obj_t* subtitle_box_ = nullptr;
+    lv_obj_t* subtitle_label_ = nullptr;
+    lv_obj_t* toast_ = nullptr;
+    lv_obj_t* toast_label_ = nullptr;
+    uint32_t toast_until_ = 0;
+    uint32_t next_blink_ = 0;
+    uint32_t blink_end_ = 0;
+    int last_clock_min_ = -1;
+    uint32_t rng_ = 0x4A07A9E1;
+    lv_timer_t* timer_ = nullptr;
+};
+
+#endif  // JOTAPE_UI_H
