@@ -1,5 +1,8 @@
 #include "jotape_ui.h"
 
+#include "jotape_eyes.h"
+#include "jotape_helmet.h"
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -28,7 +31,6 @@ constexpr uint32_t kTimerPeriodMs = 100;
 
 lv_color_t Green() { return lv_color_hex(0x39FF88); }
 lv_color_t DimGreen() { return lv_color_hex(0x1E7A48); }
-lv_color_t DarkGreen() { return lv_color_hex(0x04140B); }
 lv_color_t Orange() { return lv_color_hex(0xFF8A1F); }
 lv_color_t Yellow() { return lv_color_hex(0xFFC93C); }
 
@@ -75,180 +77,207 @@ bool Reached(uint32_t now, uint32_t deadline) { return static_cast<int32_t>(now 
 /* JotapeFace                                                          */
 /* ------------------------------------------------------------------ */
 
-void JotapeFace::Create(lv_obj_t* parent, int size) {
-    size_ = size;
-    const int head_h = size * 82 / 100;
+namespace {
 
-    root_ = Decor(parent);
-    lv_obj_set_size(root_, size, head_h);
-    lv_obj_set_style_bg_color(root_, DarkGreen(), 0);
-    lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(root_, Green(), 0);
-    lv_obj_set_style_border_width(root_, size >= 90 ? 3 : 2, 0);
-    lv_obj_set_style_radius(root_, size * 26 / 100, 0);
+struct ShapeEntry {
+    const char* name;
+    const lv_image_dsc_t* big;
+    const lv_image_dsc_t* small;
+};
 
-    // Visor cap on top of the head
-    lv_obj_t* cap = Decor(root_);
-    lv_obj_set_size(cap, size * 36 / 100, size * 12 / 100);
-    lv_obj_align(cap, LV_ALIGN_TOP_MID, 0, size * 5 / 100);
-    lv_obj_set_style_border_color(cap, Green(), 0);
-    lv_obj_set_style_border_width(cap, 2, 0);
-    lv_obj_set_style_radius(cap, 4, 0);
-    lv_obj_t* cap_line = Decor(cap);
-    lv_obj_set_size(cap_line, size * 18 / 100, 2);
-    lv_obj_center(cap_line);
-    lv_obj_set_style_bg_color(cap_line, DimGreen(), 0);
-    lv_obj_set_style_bg_opa(cap_line, LV_OPA_COVER, 0);
+const ShapeEntry kShapes[] = {
+    {"heart", &jotape_eye_heart_big, &jotape_eye_heart_small},
+    {"sparkle", &jotape_eye_sparkle_big, &jotape_eye_sparkle_small},
+    {"spiral", &jotape_eye_spiral_big, &jotape_eye_spiral_small},
+    {"chev_up", &jotape_eye_chev_up_big, &jotape_eye_chev_up_small},
+    {"chev_right", &jotape_eye_chev_right_big, &jotape_eye_chev_right_small},
+    {"chev_left", &jotape_eye_chev_left_big, &jotape_eye_chev_left_small},
+    {"angry_l", &jotape_eye_angry_l_big, &jotape_eye_angry_l_small},
+    {"angry_r", &jotape_eye_angry_r_big, &jotape_eye_angry_r_small},
+    {"sad_l", &jotape_eye_sad_l_big, &jotape_eye_sad_l_small},
+    {"sad_r", &jotape_eye_sad_r_big, &jotape_eye_sad_r_small},
+    {"tear", &jotape_eye_tear_big, &jotape_eye_tear_small},
+    {"arc", &jotape_eye_arc_big, &jotape_eye_arc_small},
+};
 
-    for (int i = 0; i < 2; i++) {
-        eyes_[i] = Decor(root_);
-        lv_obj_set_style_bg_color(eyes_[i], lv_color_hex(0x0B2E1A), 0);
-        lv_obj_set_style_bg_opa(eyes_[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(eyes_[i], Green(), 0);
-        lv_obj_set_style_border_width(eyes_[i], size >= 90 ? 3 : 2, 0);
-        lv_obj_set_style_radius(eyes_[i], LV_RADIUS_CIRCLE, 0);
+lv_color_t EyeGreen() { return lv_color_hex(0x5DFFA0); }
+lv_color_t HeartPink() { return lv_color_hex(0xFF4D7A); }
 
-        pupils_[i] = Decor(eyes_[i]);
-        lv_obj_set_style_bg_color(pupils_[i], Green(), 0);
-        lv_obj_set_style_bg_opa(pupils_[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(pupils_[i], LV_RADIUS_CIRCLE, 0);
+}  // namespace
 
-        glints_[i] = Decor(eyes_[i]);
-        lv_obj_set_style_bg_color(glints_[i], lv_color_white(), 0);
-        lv_obj_set_style_bg_opa(glints_[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(glints_[i], LV_RADIUS_CIRCLE, 0);
-    }
-
-    mouth_ = Decor(root_);
-    lv_obj_set_style_bg_color(mouth_, lv_color_hex(0x0B2E1A), 0);
-    lv_obj_set_style_bg_opa(mouth_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(mouth_, Green(), 0);
-    lv_obj_set_style_border_width(mouth_, 2, 0);
-    for (int i = 0; i < 2; i++) {
-        grille_[i] = Decor(mouth_);
-        lv_obj_set_style_bg_color(grille_[i], Green(), 0);
-        lv_obj_set_style_bg_opa(grille_[i], LV_OPA_COVER, 0);
-    }
-
-    ApplyEyes();
-    ApplyMouth();
-}
-
-void JotapeFace::ApplyEyes() {
-    if (root_ == nullptr) {
-        return;
-    }
-    const int base = size_ * 27 / 100;
-    const int scale = big_eyes_ ? 118 : 100;
-    int w = base * eye_w_pct_ / 100 * scale / 100;
-    int h = base * eye_h_pct_ / 100 * scale / 100;
-    const bool closed = closed_ || sleepy_;
-    if (closed) {
-        h = LV_MAX(3, size_ / 28);
-    }
-    const bool show_pupil = !closed && h >= base * 45 / 100;
-    for (int i = 0; i < 2; i++) {
-        lv_obj_set_size(eyes_[i], w, h);
-        const int dx = (i == 0 ? -1 : 1) * size_ * 21 / 100;
-        lv_obj_align(eyes_[i], LV_ALIGN_CENTER, dx, -size_ * 4 / 100 + eye_dy_);
-
-        const int pupil = LV_MIN(w, h) * 55 / 100;
-        lv_obj_set_size(pupils_[i], pupil, pupil);
-        lv_obj_align(pupils_[i], LV_ALIGN_CENTER, pupil_dx_ * pupil / 100, pupil_dy_ * pupil / 100);
-        const int glint = LV_MAX(2, LV_MIN(w, h) * 18 / 100);
-        lv_obj_set_size(glints_[i], glint, glint);
-        lv_obj_align(glints_[i], LV_ALIGN_CENTER, -w * 14 / 100, -h * 14 / 100);
-        if (show_pupil) {
-            lv_obj_remove_flag(pupils_[i], LV_OBJ_FLAG_HIDDEN);
-            lv_obj_remove_flag(glints_[i], LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(pupils_[i], LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(glints_[i], LV_OBJ_FLAG_HIDDEN);
+const lv_image_dsc_t* JotapeFace::Shape(const char* name) const {
+    for (const auto& s : kShapes) {
+        if (strcmp(s.name, name) == 0) {
+            return big_ ? s.big : s.small;
         }
     }
+    return nullptr;
 }
 
-void JotapeFace::ApplyMouth() {
-    if (root_ == nullptr) {
-        return;
-    }
-    const int base_w = size_ * 44 / 100;
-    const int base_h = size_ * 15 / 100;
-    const int w = base_w * mouth_w_pct_ / 100;
-    int h;
-    if (talk_pct_ >= 0) {
-        h = base_h * (35 + talk_pct_ * 115 / 100) / 100;
+void JotapeFace::Create(lv_obj_t* parent, bool big) {
+    big_ = big;
+    tint_ = EyeGreen();
+
+    root_ = lv_image_create(parent);
+    lv_image_set_src(root_, big ? &jotape_helmet_112 : &jotape_helmet_60);
+    lv_obj_remove_flag(root_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(root_, LV_OBJ_FLAG_SCROLLABLE);
+
+    screen_ = Decor(root_);
+    if (big) {
+        lv_obj_set_pos(screen_, JOTAPE_HELMET_112_SCREEN_X, JOTAPE_HELMET_112_SCREEN_Y);
+        screen_w_ = JOTAPE_HELMET_112_SCREEN_W;
+        screen_h_ = JOTAPE_HELMET_112_SCREEN_H;
     } else {
-        h = base_h * mouth_h_pct_ / 100;
+        lv_obj_set_pos(screen_, JOTAPE_HELMET_60_SCREEN_X, JOTAPE_HELMET_60_SCREEN_Y);
+        screen_w_ = JOTAPE_HELMET_60_SCREEN_W;
+        screen_h_ = JOTAPE_HELMET_60_SCREEN_H;
     }
-    h = LV_MAX(4, h);
-    lv_obj_set_size(mouth_, w, h);
-    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, size_ * 25 / 100);
-    lv_obj_set_style_radius(mouth_, w <= h + 2 ? LV_RADIUS_CIRCLE : 4, 0);
+    lv_obj_set_size(screen_, screen_w_, screen_h_);
 
-    const bool show_grille = h >= 10 && w > h + 2;
     for (int i = 0; i < 2; i++) {
-        lv_obj_set_size(grille_[i], LV_MAX(2, w - 10), 2);
-        lv_obj_align(grille_[i], LV_ALIGN_TOP_MID, 0, (h - 4) * (i + 1) / 3 - 1);
-        if (show_grille) {
-            lv_obj_remove_flag(grille_[i], LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(grille_[i], LV_OBJ_FLAG_HIDDEN);
-        }
+        bars_[i] = Decor(screen_);
+        lv_obj_set_style_bg_color(bars_[i], EyeGreen(), 0);
+        lv_obj_set_style_bg_opa(bars_[i], LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(bars_[i], LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_shadow_color(bars_[i], EyeGreen(), 0);
+        lv_obj_set_style_shadow_width(bars_[i], big ? 10 : 4, 0);
+        lv_obj_set_style_shadow_opa(bars_[i], LV_OPA_40, 0);
+
+        images_[i] = lv_image_create(screen_);
+        lv_obj_remove_flag(images_[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_image_recolor_opa(images_[i], LV_OPA_COVER, 0);
     }
+
+    tear_ = lv_image_create(screen_);
+    lv_image_set_src(tear_, Shape("tear"));
+    lv_obj_remove_flag(tear_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_image_recolor(tear_, lv_color_hex(0x7FD8FF), 0);
+    lv_obj_set_style_image_recolor_opa(tear_, LV_OPA_COVER, 0);
+
+    question_ = lv_label_create(screen_);
+    lv_obj_set_style_text_font(question_, big ? &font_jotape_30 : &font_jotape_20, 0);
+    lv_obj_set_style_text_color(question_, lv_color_hex(0xFFC93C), 0);
+    lv_label_set_text(question_, "?");
+
+    SetExpression("neutral");
 }
 
 void JotapeFace::SetExpression(const char* emotion) {
-    eye_w_pct_ = 100;
-    eye_h_pct_ = 100;
-    eye_dy_ = 0;
-    pupil_dx_ = 0;
-    pupil_dy_ = 0;
-    mouth_w_pct_ = 100;
-    mouth_h_pct_ = 100;
-    sleepy_ = false;
-
     const char* e = emotion != nullptr ? emotion : "neutral";
-    if (Is(e, "happy") || Is(e, "laughing") || Is(e, "funny") || Is(e, "loving") ||
-        Is(e, "confident") || Is(e, "cool") || Is(e, "relaxed") || Is(e, "delicious") ||
-        Is(e, "kissy") || Is(e, "winking") || Is(e, "silly")) {
-        eye_w_pct_ = 108;
-        eye_h_pct_ = 66;
-        pupil_dy_ = -12;
-        mouth_w_pct_ = 120;
-        mouth_h_pct_ = 150;
-    } else if (Is(e, "sad") || Is(e, "crying")) {
-        eye_h_pct_ = 80;
-        eye_dy_ = size_ * 4 / 100;
-        pupil_dy_ = 25;
-        mouth_w_pct_ = 65;
-        mouth_h_pct_ = 70;
-    } else if (Is(e, "angry")) {
-        eye_h_pct_ = 62;
-        eye_dy_ = size_ * 2 / 100;
-        mouth_w_pct_ = 80;
-        mouth_h_pct_ = 60;
+    Eye bar;
+    eyes_[0] = eyes_[1] = bar;
+    eye_dy_ = 0;
+    show_tear_ = false;
+    show_question_ = false;
+    tint_ = EyeGreen();
+
+    auto both = [this](const char* shape) { eyes_[0].image = eyes_[1].image = Shape(shape); };
+
+    if (Is(e, "happy") || Is(e, "funny") || Is(e, "delicious")) {
+        both("chev_up");
+    } else if (Is(e, "laughing")) {
+        eyes_[0].image = Shape("chev_right");
+        eyes_[1].image = Shape("chev_left");
+    } else if (Is(e, "loving") || Is(e, "kissy")) {
+        both("heart");
+        tint_ = HeartPink();
+    } else if (Is(e, "confident")) {
+        both("sparkle");
     } else if (Is(e, "surprised") || Is(e, "shocked")) {
-        eye_w_pct_ = 118;
-        eye_h_pct_ = 118;
-        mouth_w_pct_ = 40;
-        mouth_h_pct_ = 125;
-    } else if (Is(e, "thinking") || Is(e, "confused")) {
-        pupil_dx_ = 30;
-        pupil_dy_ = -30;
-        mouth_w_pct_ = 60;
-    } else if (Is(e, "embarrassed")) {
-        eye_h_pct_ = 70;
-        pupil_dy_ = 20;
-        mouth_w_pct_ = 60;
-        mouth_h_pct_ = 60;
+        eyes_[0].dot = eyes_[1].dot = true;
+        eyes_[0].w_pct = eyes_[1].w_pct = 190;
+        eyes_[0].h_pct = eyes_[1].h_pct = 75;
+    } else if (Is(e, "relaxed") || Is(e, "embarrassed")) {
+        both("arc");
     } else if (Is(e, "sleepy")) {
-        sleepy_ = true;
-        mouth_w_pct_ = 50;
-        mouth_h_pct_ = 60;
+        eyes_[0].w_pct = eyes_[1].w_pct = 220;
+        eyes_[0].h_pct = eyes_[1].h_pct = 14;
+        eye_dy_ = 10;
+    } else if (Is(e, "cool")) {
+        eyes_[0].w_pct = eyes_[1].w_pct = 260;
+        eyes_[0].h_pct = eyes_[1].h_pct = 34;
+        eye_dy_ = -4;
+    } else if (Is(e, "sad")) {
+        eyes_[0].image = Shape("sad_l");
+        eyes_[1].image = Shape("sad_r");
+        eye_dy_ = 6;
+    } else if (Is(e, "crying")) {
+        eyes_[0].image = Shape("sad_l");
+        eyes_[1].image = Shape("sad_r");
+        eye_dy_ = 2;
+        show_tear_ = true;
+    } else if (Is(e, "angry")) {
+        eyes_[0].image = Shape("angry_l");
+        eyes_[1].image = Shape("angry_r");
+    } else if (Is(e, "thinking")) {
+        eyes_[0].w_pct = eyes_[1].w_pct = 220;
+        eyes_[0].h_pct = eyes_[1].h_pct = 16;
+        show_question_ = true;
+    } else if (Is(e, "confused") || Is(e, "silly")) {
+        both("spiral");
+    } else if (Is(e, "winking")) {
+        eyes_[1].image = Shape("chev_up");
     }
-    ApplyEyes();
-    ApplyMouth();
+    Apply();
+}
+
+void JotapeFace::Apply() {
+    if (root_ == nullptr) {
+        return;
+    }
+    const int base_w = LV_MAX(3, screen_w_ * 11 / 100);
+    const int base_h = LV_MAX(6, screen_h_ * 42 / 100);
+    const int cy = screen_h_ / 2 + screen_h_ * eye_dy_ / 100;
+    for (int i = 0; i < 2; i++) {
+        const Eye& eye = eyes_[i];
+        const int cx = (i == 0 ? 30 : 70) * screen_w_ / 100 + look_dx_;
+        if (eye.image != nullptr) {
+            lv_obj_add_flag(bars_[i], LV_OBJ_FLAG_HIDDEN);
+            lv_image_set_src(images_[i], eye.image);
+            lv_obj_set_style_image_recolor(images_[i], tint_, 0);
+            const int bounce = talk_ >= 0 ? (talk_ * (big_ ? 3 : 1) / 100) : 0;
+            lv_obj_set_pos(images_[i], cx - eye.image->header.w / 2,
+                           cy - eye.image->header.h / 2 - bounce);
+            if (closed_) {
+                lv_obj_add_flag(images_[i], LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_remove_flag(images_[i], LV_OBJ_FLAG_HIDDEN);
+            }
+            continue;
+        }
+        lv_obj_add_flag(images_[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(bars_[i], LV_OBJ_FLAG_HIDDEN);
+        int w = base_w * eye.w_pct / 100;
+        int h = base_h * eye.h_pct / 100;
+        if (eye.dot) {
+            w = h = LV_MIN(w, h);
+        }
+        if (listening_ && !eye.dot && eye.h_pct >= 100) {
+            h = h * 120 / 100;
+        }
+        if (talk_ >= 0 && !eye.dot && eye.h_pct >= 100) {
+            h = h * (70 + talk_ * 45 / 100) / 100;
+        }
+        if (closed_) {
+            h = LV_MAX(2, base_h / 8);
+            w = LV_MAX(w, base_w * 2);
+        }
+        lv_obj_set_size(bars_[i], w, h);
+        lv_obj_set_pos(bars_[i], cx - w / 2, cy - h / 2);
+    }
+    if (show_tear_ && !closed_) {
+        lv_obj_remove_flag(tear_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(tear_, 30 * screen_w_ / 100 - 2, cy + screen_h_ * 14 / 100);
+    } else {
+        lv_obj_add_flag(tear_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (show_question_) {
+        lv_obj_remove_flag(question_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_align(question_, LV_ALIGN_TOP_RIGHT, -screen_w_ * 6 / 100, 0);
+    } else {
+        lv_obj_add_flag(question_, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void JotapeFace::SetEyesClosed(bool closed) {
@@ -256,20 +285,28 @@ void JotapeFace::SetEyesClosed(bool closed) {
         return;
     }
     closed_ = closed;
-    ApplyEyes();
+    Apply();
 }
 
-void JotapeFace::SetMouthOpen(int percent) {
-    talk_pct_ = percent < 0 ? -1 : LV_MIN(percent, 100);
-    ApplyMouth();
+void JotapeFace::SetTalkLevel(int percent) {
+    talk_ = percent < 0 ? -1 : LV_MIN(percent, 100);
+    Apply();
 }
 
-void JotapeFace::SetBigEyes(bool big) {
-    if (big_eyes_ == big) {
+void JotapeFace::SetListening(bool listening) {
+    if (listening_ == listening) {
         return;
     }
-    big_eyes_ = big;
-    ApplyEyes();
+    listening_ = listening;
+    Apply();
+}
+
+void JotapeFace::SetLook(int dx) {
+    if (look_dx_ == dx) {
+        return;
+    }
+    look_dx_ = dx;
+    Apply();
 }
 
 /* ------------------------------------------------------------------ */
@@ -381,7 +418,7 @@ void JotapeUi::CreateBoot() {
     lv_obj_set_style_text_letter_space(title, 6, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 3, 14);
 
-    boot_face_.Create(p, 104);
+    boot_face_.Create(p, true);
     lv_obj_align(boot_face_.root(), LV_ALIGN_CENTER, 0, -4);
 
     lv_obj_t* l1 = NewLabel(p, &font20_, Green(), "TERMINAL CONVERSACIONAL");
@@ -405,14 +442,14 @@ void JotapeUi::CreateTerminal() {
     lv_label_set_long_mode(terminal_status_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_pos(terminal_status_, 14, 40);
 
-    terminal_face_.Create(p, 56);
-    lv_obj_align(terminal_face_.root(), LV_ALIGN_TOP_MID, 0, 66);
+    terminal_face_.Create(p, false);
+    lv_obj_align(terminal_face_.root(), LV_ALIGN_TOP_MID, 0, 60);
 
     terminal_message_ = NewLabel(p, &font20_, Green(), "");
-    lv_obj_set_size(terminal_message_, 216, 112);
+    lv_obj_set_size(terminal_message_, 216, 110);
     lv_label_set_long_mode(terminal_message_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(terminal_message_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(terminal_message_, 12, 118);
+    lv_obj_set_pos(terminal_message_, 12, 122);
 }
 
 void JotapeUi::CreateHome() {
@@ -445,8 +482,8 @@ void JotapeUi::CreateHome() {
     lv_obj_t* right = NewLabel(p, &font20_, Orange(), "//////");
     lv_obj_align(right, LV_ALIGN_BOTTOM_RIGHT, -10, -8);
 
-    home_face_.Create(p, 104);
-    lv_obj_align(home_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 12);
+    home_face_.Create(p, true);
+    lv_obj_align(home_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 18);
 }
 
 void JotapeUi::CreateMenu() {
@@ -499,8 +536,8 @@ void JotapeUi::CreateListening() {
     AddBracket(p, 18, 227, false, true, 14);
     AddBracket(p, 221, 227, true, true, 14);
 
-    listen_face_.Create(p, 112);
-    lv_obj_align(listen_face_.root(), LV_ALIGN_TOP_MID, 0, 94);
+    listen_face_.Create(p, true);
+    lv_obj_align(listen_face_.root(), LV_ALIGN_TOP_MID, 0, 84);
 
     for (int i = 0; i < 10; i++) {
         const int x = i < 5 ? 24 + i * 6 : 190 + (i - 5) * 6;
@@ -518,12 +555,12 @@ void JotapeUi::CreateSpeaking() {
     lv_obj_t* tag = NewLabel(p, &font20_, Orange(), "HABLANDO");
     lv_obj_align(tag, LV_ALIGN_TOP_RIGHT, -12, 12);
 
-    speak_face_.Create(p, 100);
-    lv_obj_align(speak_face_.root(), LV_ALIGN_TOP_MID, 0, 42);
+    speak_face_.Create(p, true);
+    lv_obj_align(speak_face_.root(), LV_ALIGN_TOP_MID, 0, 32);
 
     subtitle_box_ = Decor(p);
-    lv_obj_set_pos(subtitle_box_, 10, 134);
-    lv_obj_set_size(subtitle_box_, 220, 100);
+    lv_obj_set_pos(subtitle_box_, 10, 148);
+    lv_obj_set_size(subtitle_box_, 220, 86);
     lv_obj_set_style_border_color(subtitle_box_, DimGreen(), 0);
     lv_obj_set_style_border_width(subtitle_box_, 2, 0);
     lv_obj_set_style_radius(subtitle_box_, 4, 0);
@@ -531,7 +568,7 @@ void JotapeUi::CreateSpeaking() {
     lv_obj_set_style_bg_opa(subtitle_box_, LV_OPA_COVER, 0);
 
     subtitle_label_ = NewLabel(subtitle_box_, &font20_, Green(), "");
-    lv_obj_set_size(subtitle_label_, 204, 88);
+    lv_obj_set_size(subtitle_label_, 204, 72);
     lv_label_set_long_mode(subtitle_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(subtitle_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(subtitle_label_, LV_ALIGN_CENTER, 0, 0);
@@ -557,7 +594,7 @@ void JotapeUi::ApplyScreen(JotapeScreen screen) {
     lv_obj_remove_flag(panels_[static_cast<int>(screen)], LV_OBJ_FLAG_HIDDEN);
 
     if (current_ == JotapeScreen::kSpeaking && screen != JotapeScreen::kSpeaking) {
-        speak_face_.SetMouthOpen(-1);
+        speak_face_.SetTalkLevel(-1);
     }
     current_ = screen;
 
@@ -568,7 +605,7 @@ void JotapeUi::ApplyScreen(JotapeScreen screen) {
         last_clock_min_ = -1;
         RefreshClock();
     }
-    listen_face_.SetBigEyes(screen == JotapeScreen::kListening);
+    listen_face_.SetListening(screen == JotapeScreen::kListening);
 }
 
 void JotapeUi::EndBootHold() {
@@ -735,6 +772,19 @@ void JotapeUi::OnTimer() {
         }
     }
 
+    // Glance sideways now and then
+    if (face != nullptr && current_ != JotapeScreen::kSpeaking) {
+        if (look_end_ != 0 && Reached(now, look_end_)) {
+            face->SetLook(0);
+            look_end_ = 0;
+        } else if (look_end_ == 0 && Reached(now, next_look_)) {
+            const int dx[] = {-4, -3, 3, 4};
+            face->SetLook(dx[Random() % 4]);
+            look_end_ = now + 900 + Random() % 600;
+            next_look_ = now + 4000 + Random() % 5000;
+        }
+    }
+
     if (current_ == JotapeScreen::kListening) {
         for (int i = 0; i < 10; i++) {
             const int h = 6 + Random() % 42;
@@ -742,7 +792,7 @@ void JotapeUi::OnTimer() {
             lv_obj_set_y(bars_[i], 140 - h / 2);
         }
     } else if (current_ == JotapeScreen::kSpeaking) {
-        speak_face_.SetMouthOpen(Random() % 101);
+        speak_face_.SetTalkLevel(Random() % 101);
     }
 }
 

@@ -31,39 +31,48 @@ enum class JotapeMenuItem {
     kCount,
 };
 
+// JOTAPE's head: a fixed helmet image with glowing eyes drawn on its empty
+// face screen. Eyes are either rounded bars/dots (animatable) or small tinted
+// shape images (^, > <, hearts, spirals...).
 class JotapeFace {
 public:
-    void Create(lv_obj_t* parent, int size);
+    void Create(lv_obj_t* parent, bool big);
     lv_obj_t* root() const { return root_; }
     void SetExpression(const char* emotion);
-    void SetEyesClosed(bool closed);
-    void SetMouthOpen(int percent);  // 0..100 while talking, -1 to stop
-    void SetBigEyes(bool big);
+    void SetEyesClosed(bool closed);  // blink
+    void SetTalkLevel(int percent);   // 0..100 while talking, -1 to stop
+    void SetListening(bool listening);
+    void SetLook(int dx);  // glance sideways, in pixels
 
 private:
-    void ApplyEyes();
-    void ApplyMouth();
+    struct Eye {
+        const lv_image_dsc_t* image = nullptr;  // nullptr = draw a bar
+        int w_pct = 100;                        // bar size, percent of base
+        int h_pct = 100;
+        bool dot = false;  // round dot instead of a pill
+    };
+    void Apply();
+    const lv_image_dsc_t* Shape(const char* name) const;
 
-    int size_ = 0;
+    bool big_ = true;
     lv_obj_t* root_ = nullptr;
-    lv_obj_t* eyes_[2] = {};
-    lv_obj_t* pupils_[2] = {};
-    lv_obj_t* glints_[2] = {};
-    lv_obj_t* mouth_ = nullptr;
-    lv_obj_t* grille_[2] = {};
+    lv_obj_t* screen_ = nullptr;
+    lv_obj_t* bars_[2] = {};
+    lv_obj_t* images_[2] = {};
+    lv_obj_t* tear_ = nullptr;
+    lv_obj_t* question_ = nullptr;
 
-    // Current expression parameters (percent of the base eye/mouth size)
-    int eye_w_pct_ = 100;
-    int eye_h_pct_ = 100;
-    int eye_dy_ = 0;
-    int pupil_dx_ = 0;
-    int pupil_dy_ = 0;
-    int mouth_w_pct_ = 100;
-    int mouth_h_pct_ = 100;
+    int screen_w_ = 0;
+    int screen_h_ = 0;
+    Eye eyes_[2];
+    int eye_dy_ = 0;  // percent of screen height
+    bool show_tear_ = false;
+    bool show_question_ = false;
+    lv_color_t tint_;
     bool closed_ = false;
-    bool sleepy_ = false;
-    bool big_eyes_ = false;
-    int talk_pct_ = -1;  // -1 = not talking
+    bool listening_ = false;
+    int talk_ = -1;
+    int look_dx_ = 0;
 };
 
 class JotapeUi {
@@ -167,6 +176,8 @@ private:
     lv_obj_t* toast_label_ = nullptr;
     uint32_t toast_until_ = 0;
     uint32_t next_blink_ = 0;
+    uint32_t next_look_ = 0;
+    uint32_t look_end_ = 0;
     uint32_t blink_end_ = 0;
     int last_clock_min_ = -1;
     uint32_t rng_ = 0x4A07A9E1;

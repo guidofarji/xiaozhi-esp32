@@ -24,8 +24,12 @@ interfaz estilo terminal retro (`jotape_ui.*`, solo LVGL):
 Desde el menú se vuelve deslizando a la derecha, tocando "HORA Y FECHA" o
 esperando 20 s. Las demás funciones muestran "PRÓXIMAMENTE".
 
-La cara del robot se dibuja con LVGL y cambia según la emoción que manda el
-servidor (contento, triste, sorprendido, pensando, enojado, dormido...).
+La cara de JOTAPE es un casco fijo (`jotape_helmet.c`, generado con IA y
+convertido a RGB565 en 112 y 60 px) con ojos dibujados encima en la pantalla
+vacía del casco. Los ojos son barras/puntos animados (parpadean, miran a los
+costados, laten al hablar) o formas A8 teñidas (`jotape_eyes.c`: ^ ^, > <,
+corazones, estrellas, espirales, enojado, triste, lágrima), según la emoción
+que manda el servidor.
 
 Fuentes generadas (`font_jotape_*.c`): VT323 y Material Symbols, ambas con
 licencia SIL OFL 1.1 (ver `fonts/`).
