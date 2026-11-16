@@ -2,6 +2,12 @@
 #include "codecs/box_audio_codec.h"
 #include "display/lcd_display.h"
 #include "jotape_display.h"
+#include "jotape_motion.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
@@ -58,6 +64,82 @@ private:
     CustomButton volume_up_button_;
     CustomButton volume_down_button_;
     i2c_master_bus_handle_t i2c_bus_;
+    esp_lcd_panel_handle_t panel_ = nullptr;
+    esp_lcd_touch_handle_t touch_ = nullptr;
+    int rotation_ = -1;
+
+    // Rotates the UI (panel scan direction + LVGL coordinates + touch).
+    void ApplyRotation(int rotation) {
+        static const int kGaps[4][2] = {{JOTAPE_GAP_ROTATION_0},
+                                        {JOTAPE_GAP_ROTATION_90},
+                                        {JOTAPE_GAP_ROTATION_180},
+                                        {JOTAPE_GAP_ROTATION_270}};
+        if (rotation < 0 || rotation > 3 || rotation == rotation_ || panel_ == nullptr) {
+            return;
+        }
+        DisplayLockGuard lock(display_);
+        lv_display_set_rotation(lv_display_get_default(),
+                                static_cast<lv_display_rotation_t>(rotation));
+        esp_lcd_panel_set_gap(panel_, DISPLAY_OFFSET_X + kGaps[rotation][0],
+                              DISPLAY_OFFSET_Y + kGaps[rotation][1]);
+        lv_obj_invalidate(lv_screen_active());
+        if (touch_ != nullptr) {
+            // Map raw touch points to the rotated LVGL coordinates
+            // (the driver mirrors first, then swaps).
+            static const bool kTouch[4][3] = {
+                // swap_xy, mirror_x, mirror_y
+                {false, false, false},  // 0
+                {true, false, true},    // 90
+                {false, true, true},    // 180
+                {true, true, false},    // 270
+            };
+            esp_lcd_touch_set_swap_xy(touch_, kTouch[rotation][0]);
+            esp_lcd_touch_set_mirror_x(touch_, kTouch[rotation][1]);
+            esp_lcd_touch_set_mirror_y(touch_, kTouch[rotation][2]);
+        }
+        rotation_ = rotation;
+        ESP_LOGI(TAG, "Screen rotation: %d deg", rotation * 90);
+    }
+
+    // Polls the accelerometer and keeps the face upright.
+    static void RotationTask(void* arg) {
+        auto self = static_cast<CustomBoard*>(arg);
+        int candidate = -1;
+        int stable = 0;
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(150));
+            JotapeMotion::Accel a;
+            if (!JotapeMotion::Read(a)) {
+                continue;
+            }
+            const int ax = std::abs(a.x);
+            const int ay = std::abs(a.y);
+            int next = -1;
+            // Ignore lying flat or ambiguous diagonal positions.
+            if (std::max(ax, ay) > 550 && std::abs(ax - ay) > 250) {
+                if (ax > ay) {
+                    next = a.x > 0 ? JOTAPE_ROTATION_GRAVITY_POS_X : JOTAPE_ROTATION_GRAVITY_NEG_X;
+                } else {
+                    next = a.y > 0 ? JOTAPE_ROTATION_GRAVITY_POS_Y : JOTAPE_ROTATION_GRAVITY_NEG_Y;
+                }
+            }
+            if (next < 0 || next != candidate) {
+                candidate = next;
+                stable = 0;
+                continue;
+            }
+            if (++stable == 4 && next != self->rotation_) {
+                self->ApplyRotation(next);
+            }
+        }
+    }
+
+    void InitializeRotation() {
+        ApplyRotation(JOTAPE_DEFAULT_ROTATION);
+        if (JotapeMotion::Initialize(i2c_bus_) == ESP_OK) {
+            xTaskCreate(RotationTask, "jotape_rotate", 3072, this, 2, nullptr);
+        }
+    }
     LcdDisplay* display_;
     PowerManager* power_manager_ = nullptr;
     PowerSaveTimer* power_save_timer_ = nullptr;
@@ -148,6 +230,7 @@ private:
         ret = esp_lcd_touch_new_i2c_cst816s(tp_io_handle, &tp_cfg, &touch_handle);
         if (ret == ESP_OK)
         {
+            touch_ = touch_handle;
             const lvgl_port_touch_cfg_t touch_cfg = {
                 .disp = lv_display_get_default(), 
                 .handle = touch_handle,
@@ -191,6 +274,7 @@ private:
         esp_lcd_panel_mirror(panel, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y);
 
         
+        panel_ = panel;
         display_ = new JotapeDisplay(panel_io, panel,
                                     DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY
                                     );
@@ -297,6 +381,7 @@ public:
         InitializeTouch();
         InitializeButtons();
         InitializeTools();
+        InitializeRotation();
         GetBacklight()->RestoreBrightness();
     }
 

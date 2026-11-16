@@ -5,7 +5,16 @@ Board propia basada en `waveshare/esp32-s3-touch-lcd-1.54`
 audio ES8311 + ES7210). El hardware y los pines son idénticos a la board
 de Waveshare; ver `config.h`.
 
-La IMU QMI8658 todavía no se inicializa.
+## Orientación automática
+
+La IMU QMI8658 (`jotape_motion.*`) se usa para girar la pantalla y que la
+cara quede siempre derecha. La posición natural (al encender y apoyada
+plana) es rotada 90° (`JOTAPE_DEFAULT_ROTATION` en `config.h`).
+
+Si en alguna posición la cara queda de costado o al revés, se ajusta la
+tabla `JOTAPE_ROTATION_GRAVITY_*`; si la imagen aparece corrida o con una
+franja de basura, se ajustan los `JOTAPE_GAP_ROTATION_*`. La pantalla gira
+por hardware (sin costo de CPU) y el táctil se transforma junto con ella.
 
 ## Interfaz JOTAPE
 

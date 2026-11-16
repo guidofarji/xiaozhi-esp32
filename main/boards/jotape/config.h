@@ -53,4 +53,24 @@
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_46
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
 
+/* ---- JOTAPE screen orientation ----
+ * Rotation used at power-on and while the board lies flat (buttons on the
+ * side = face upright). Values are lv_display_rotation_t (0..3 = 0/90/180/270).
+ */
+#define JOTAPE_DEFAULT_ROTATION 1
+
+/* Rotation to apply when gravity points along each accelerometer axis.
+ * Adjust if the face ends up sideways/upside down for some orientation. */
+#define JOTAPE_ROTATION_GRAVITY_POS_X 1
+#define JOTAPE_ROTATION_GRAVITY_NEG_X 3
+#define JOTAPE_ROTATION_GRAVITY_POS_Y 0
+#define JOTAPE_ROTATION_GRAVITY_NEG_Y 2
+
+/* The ST7789 has 240x320 RAM for this 240x240 glass: when the panel mirrors
+ * its rows the visible area shifts by 80 pixels. Gap (x, y) per rotation. */
+#define JOTAPE_GAP_ROTATION_0 0, 0
+#define JOTAPE_GAP_ROTATION_90 80, 0
+#define JOTAPE_GAP_ROTATION_180 0, 80
+#define JOTAPE_GAP_ROTATION_270 0, 0
+
 #endif // _BOARD_CONFIG_H_
