@@ -81,23 +81,25 @@ namespace {
 
 struct ShapeEntry {
     const char* name;
+    const lv_image_dsc_t* xl;
     const lv_image_dsc_t* big;
     const lv_image_dsc_t* small;
 };
 
 const ShapeEntry kShapes[] = {
-    {"heart", &jotape_eye_heart_big, &jotape_eye_heart_small},
-    {"sparkle", &jotape_eye_sparkle_big, &jotape_eye_sparkle_small},
-    {"spiral", &jotape_eye_spiral_big, &jotape_eye_spiral_small},
-    {"chev_up", &jotape_eye_chev_up_big, &jotape_eye_chev_up_small},
-    {"chev_right", &jotape_eye_chev_right_big, &jotape_eye_chev_right_small},
-    {"chev_left", &jotape_eye_chev_left_big, &jotape_eye_chev_left_small},
-    {"angry_l", &jotape_eye_angry_l_big, &jotape_eye_angry_l_small},
-    {"angry_r", &jotape_eye_angry_r_big, &jotape_eye_angry_r_small},
-    {"sad_l", &jotape_eye_sad_l_big, &jotape_eye_sad_l_small},
-    {"sad_r", &jotape_eye_sad_r_big, &jotape_eye_sad_r_small},
-    {"tear", &jotape_eye_tear_big, &jotape_eye_tear_small},
-    {"arc", &jotape_eye_arc_big, &jotape_eye_arc_small},
+    {"heart", &jotape_eye_heart_xl, &jotape_eye_heart_big, &jotape_eye_heart_small},
+    {"sparkle", &jotape_eye_sparkle_xl, &jotape_eye_sparkle_big, &jotape_eye_sparkle_small},
+    {"spiral", &jotape_eye_spiral_xl, &jotape_eye_spiral_big, &jotape_eye_spiral_small},
+    {"chev_up", &jotape_eye_chev_up_xl, &jotape_eye_chev_up_big, &jotape_eye_chev_up_small},
+    {"chev_right", &jotape_eye_chev_right_xl, &jotape_eye_chev_right_big,
+     &jotape_eye_chev_right_small},
+    {"chev_left", &jotape_eye_chev_left_xl, &jotape_eye_chev_left_big, &jotape_eye_chev_left_small},
+    {"angry_l", &jotape_eye_angry_l_xl, &jotape_eye_angry_l_big, &jotape_eye_angry_l_small},
+    {"angry_r", &jotape_eye_angry_r_xl, &jotape_eye_angry_r_big, &jotape_eye_angry_r_small},
+    {"sad_l", &jotape_eye_sad_l_xl, &jotape_eye_sad_l_big, &jotape_eye_sad_l_small},
+    {"sad_r", &jotape_eye_sad_r_xl, &jotape_eye_sad_r_big, &jotape_eye_sad_r_small},
+    {"tear", &jotape_eye_tear_xl, &jotape_eye_tear_big, &jotape_eye_tear_small},
+    {"arc", &jotape_eye_arc_xl, &jotape_eye_arc_big, &jotape_eye_arc_small},
 };
 
 lv_color_t EyeGreen() { return lv_color_hex(0x5DFFA0); }
@@ -108,23 +110,40 @@ lv_color_t HeartPink() { return lv_color_hex(0xFF4D7A); }
 const lv_image_dsc_t* JotapeFace::Shape(const char* name) const {
     for (const auto& s : kShapes) {
         if (strcmp(s.name, name) == 0) {
-            return big_ ? s.big : s.small;
+            switch (size_) {
+                case JotapeFaceSize::kXL:
+                    return s.xl;
+                case JotapeFaceSize::kBig:
+                    return s.big;
+                default:
+                    return s.small;
+            }
         }
     }
     return nullptr;
 }
 
-void JotapeFace::Create(lv_obj_t* parent, bool big) {
-    big_ = big;
+void JotapeFace::Create(lv_obj_t* parent, JotapeFaceSize size) {
+    size_ = size;
     tint_ = EyeGreen();
 
     root_ = lv_image_create(parent);
-    lv_image_set_src(root_, big ? &jotape_helmet_112 : &jotape_helmet_60);
+    if (size == JotapeFaceSize::kXL) {
+        lv_image_set_src(root_, &jotape_helmet_150);
+    } else if (size == JotapeFaceSize::kBig) {
+        lv_image_set_src(root_, &jotape_helmet_112);
+    } else {
+        lv_image_set_src(root_, &jotape_helmet_60);
+    }
     lv_obj_remove_flag(root_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(root_, LV_OBJ_FLAG_SCROLLABLE);
 
     screen_ = Decor(root_);
-    if (big) {
+    if (size == JotapeFaceSize::kXL) {
+        lv_obj_set_pos(screen_, JOTAPE_HELMET_150_SCREEN_X, JOTAPE_HELMET_150_SCREEN_Y);
+        screen_w_ = JOTAPE_HELMET_150_SCREEN_W;
+        screen_h_ = JOTAPE_HELMET_150_SCREEN_H;
+    } else if (size == JotapeFaceSize::kBig) {
         lv_obj_set_pos(screen_, JOTAPE_HELMET_112_SCREEN_X, JOTAPE_HELMET_112_SCREEN_Y);
         screen_w_ = JOTAPE_HELMET_112_SCREEN_W;
         screen_h_ = JOTAPE_HELMET_112_SCREEN_H;
@@ -141,7 +160,7 @@ void JotapeFace::Create(lv_obj_t* parent, bool big) {
         lv_obj_set_style_bg_opa(bars_[i], LV_OPA_COVER, 0);
         lv_obj_set_style_radius(bars_[i], LV_RADIUS_CIRCLE, 0);
         lv_obj_set_style_shadow_color(bars_[i], EyeGreen(), 0);
-        lv_obj_set_style_shadow_width(bars_[i], big ? 10 : 4, 0);
+        lv_obj_set_style_shadow_width(bars_[i], size == JotapeFaceSize::kSmall ? 4 : 10, 0);
         lv_obj_set_style_shadow_opa(bars_[i], LV_OPA_40, 0);
 
         images_[i] = lv_image_create(screen_);
@@ -156,7 +175,8 @@ void JotapeFace::Create(lv_obj_t* parent, bool big) {
     lv_obj_set_style_image_recolor_opa(tear_, LV_OPA_COVER, 0);
 
     question_ = lv_label_create(screen_);
-    lv_obj_set_style_text_font(question_, big ? &font_jotape_30 : &font_jotape_20, 0);
+    lv_obj_set_style_text_font(
+        question_, size == JotapeFaceSize::kSmall ? &font_jotape_20 : &font_jotape_30, 0);
     lv_obj_set_style_text_color(question_, lv_color_hex(0xFFC93C), 0);
     lv_label_set_text(question_, "?");
 
@@ -236,7 +256,8 @@ void JotapeFace::Apply() {
             lv_obj_add_flag(bars_[i], LV_OBJ_FLAG_HIDDEN);
             lv_image_set_src(images_[i], eye.image);
             lv_obj_set_style_image_recolor(images_[i], tint_, 0);
-            const int bounce = talk_ >= 0 ? (talk_ * (big_ ? 3 : 1) / 100) : 0;
+            const int bounce =
+                talk_ >= 0 ? (talk_ * (size_ == JotapeFaceSize::kSmall ? 1 : 4) / 100) : 0;
             lv_obj_set_pos(images_[i], cx - eye.image->header.w / 2,
                            cy - eye.image->header.h / 2 - bounce);
             if (closed_) {
@@ -408,23 +429,9 @@ void JotapeUi::UpdateFonts(const Fonts& fonts) {
 
 void JotapeUi::CreateBoot() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kBoot)] = NewPanel(screen_);
-    AddFrame(p, 4, 4, 232, 232, true);
-    AddBracket(p, 10, 10, false, false, 18);
-    AddBracket(p, 229, 10, true, false, 18);
-    AddBracket(p, 10, 229, false, true, 18);
-    AddBracket(p, 229, 229, true, true, 18);
-
-    lv_obj_t* title = NewLabel(p, &font30_, Green(), "JOTAPE");
-    lv_obj_set_style_text_letter_space(title, 6, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 3, 14);
-
-    boot_face_.Create(p, true);
-    lv_obj_align(boot_face_.root(), LV_ALIGN_CENTER, 0, -4);
-
-    lv_obj_t* l1 = NewLabel(p, &font20_, Green(), "TERMINAL CONVERSACIONAL");
-    lv_obj_align(l1, LV_ALIGN_BOTTOM_MID, 0, -36);
-    lv_obj_t* l2 = NewLabel(p, &font20_, Green(), "SISTEMA v1.0");
-    lv_obj_align(l2, LV_ALIGN_BOTTOM_MID, 0, -16);
+    boot_face_.Create(p, JotapeFaceSize::kXL);
+    lv_obj_align(boot_face_.root(), LV_ALIGN_CENTER, 0, 0);
+    AddFloat(boot_face_.root(), 0, 5, 1800);
 }
 
 void JotapeUi::CreateTerminal() {
@@ -442,7 +449,7 @@ void JotapeUi::CreateTerminal() {
     lv_label_set_long_mode(terminal_status_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_pos(terminal_status_, 14, 40);
 
-    terminal_face_.Create(p, false);
+    terminal_face_.Create(p, JotapeFaceSize::kSmall);
     lv_obj_align(terminal_face_.root(), LV_ALIGN_TOP_MID, 0, 60);
 
     terminal_message_ = NewLabel(p, &font20_, Green(), "");
@@ -475,15 +482,9 @@ void JotapeUi::CreateHome() {
     lv_obj_set_style_text_letter_space(clock_label_, 2, 0);
     lv_obj_align(clock_label_, LV_ALIGN_TOP_MID, 0, 36);
 
-    AddBracket(p, 26, 150, false, false, 16);
-    AddBracket(p, 213, 150, true, false, 16);
-    lv_obj_t* left = NewLabel(p, &font20_, Orange(), "//////");
-    lv_obj_align(left, LV_ALIGN_BOTTOM_LEFT, 10, -8);
-    lv_obj_t* right = NewLabel(p, &font20_, Orange(), "//////");
-    lv_obj_align(right, LV_ALIGN_BOTTOM_RIGHT, -10, -8);
-
-    home_face_.Create(p, true);
-    lv_obj_align(home_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 18);
+    home_face_.Create(p, JotapeFaceSize::kBig);
+    lv_obj_align(home_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 26);
+    AddFloat(home_face_.root(), 26, 3, 2200);
 }
 
 void JotapeUi::CreateMenu() {
@@ -517,62 +518,53 @@ void JotapeUi::CreateMenu() {
     SelectMenuRow(0);
 }
 
+void JotapeUi::CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color) {
+    for (int i = 0; i < 10; i++) {
+        const int x = i < 5 ? 12 + i * 6 : 198 + (i - 5) * 6;
+        bars[i] = Rect(parent, x, kHeight / 2 - 4, 3, 8, color);
+        lv_obj_set_style_radius(bars[i], 1, 0);
+    }
+}
+
+void JotapeUi::UpdateWave(lv_obj_t** bars) {
+    for (int i = 0; i < 10; i++) {
+        // Taller towards the head, like a sound wave
+        const int idx = i < 5 ? i : 9 - i;
+        const int max_h = 20 + idx * 10;
+        const int h = 6 + Random() % max_h;
+        lv_obj_set_height(bars[i], h);
+        lv_obj_set_y(bars[i], kHeight / 2 - h / 2);
+    }
+}
+
+void JotapeUi::AddFloat(lv_obj_t* obj, int base_y, int amplitude, uint32_t period_ms) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, obj);
+    lv_anim_set_exec_cb(&a,
+                        [](void* var, int32_t v) { lv_obj_set_y(static_cast<lv_obj_t*>(var), v); });
+    lv_anim_set_values(&a, base_y - amplitude, base_y + amplitude);
+    lv_anim_set_duration(&a, period_ms);
+    lv_anim_set_reverse_duration(&a, period_ms);
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_in_out);
+    lv_anim_start(&a);
+}
+
 void JotapeUi::CreateListening() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kListening)] = NewPanel(screen_);
-
-    lv_obj_t* header = Decor(p);
-    lv_obj_set_size(header, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(header, 4, 0);
-    lv_obj_align(header, LV_ALIGN_TOP_MID, 0, 8);
-    NewLabel(header, &font_jotape_icons_22, Yellow(), ICON_MIC);
-    lv_obj_t* text = NewLabel(header, &font30_, Yellow(), "ESCUCHANDO...");
-    lv_obj_set_style_text_letter_space(text, 1, 0);
-
-    AddFrame(p, 14, 48, 212, 184, true);
-    AddBracket(p, 18, 52, false, false, 14);
-    AddBracket(p, 221, 52, true, false, 14);
-    AddBracket(p, 18, 227, false, true, 14);
-    AddBracket(p, 221, 227, true, true, 14);
-
-    listen_face_.Create(p, true);
-    lv_obj_align(listen_face_.root(), LV_ALIGN_TOP_MID, 0, 84);
-
-    for (int i = 0; i < 10; i++) {
-        const int x = i < 5 ? 24 + i * 6 : 190 + (i - 5) * 6;
-        bars_[i] = Rect(p, x, 136, 3, 8, Orange());
-        lv_obj_set_style_radius(bars_[i], 1, 0);
-    }
+    listen_face_.Create(p, JotapeFaceSize::kXL);
+    lv_obj_align(listen_face_.root(), LV_ALIGN_CENTER, 0, 0);
+    AddFloat(listen_face_.root(), 0, 5, 1800);
+    CreateWave(p, listen_wave_, Orange());
 }
 
 void JotapeUi::CreateSpeaking() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kSpeaking)] = NewPanel(screen_);
-
-    lv_obj_t* title = NewLabel(p, &font30_, Green(), "> JOTAPE");
-    lv_obj_set_style_text_letter_space(title, 2, 0);
-    lv_obj_set_pos(title, 12, 4);
-    lv_obj_t* tag = NewLabel(p, &font20_, Orange(), "HABLANDO");
-    lv_obj_align(tag, LV_ALIGN_TOP_RIGHT, -12, 12);
-
-    speak_face_.Create(p, true);
-    lv_obj_align(speak_face_.root(), LV_ALIGN_TOP_MID, 0, 32);
-
-    subtitle_box_ = Decor(p);
-    lv_obj_set_pos(subtitle_box_, 10, 148);
-    lv_obj_set_size(subtitle_box_, 220, 86);
-    lv_obj_set_style_border_color(subtitle_box_, DimGreen(), 0);
-    lv_obj_set_style_border_width(subtitle_box_, 2, 0);
-    lv_obj_set_style_radius(subtitle_box_, 4, 0);
-    lv_obj_set_style_bg_color(subtitle_box_, lv_color_hex(0x031008), 0);
-    lv_obj_set_style_bg_opa(subtitle_box_, LV_OPA_COVER, 0);
-
-    subtitle_label_ = NewLabel(subtitle_box_, &font20_, Green(), "");
-    lv_obj_set_size(subtitle_label_, 204, 72);
-    lv_label_set_long_mode(subtitle_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(subtitle_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(subtitle_label_, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_add_flag(subtitle_box_, LV_OBJ_FLAG_HIDDEN);
+    speak_face_.Create(p, JotapeFaceSize::kXL);
+    lv_obj_align(speak_face_.root(), LV_ALIGN_CENTER, 0, 0);
+    AddFloat(speak_face_.root(), 0, 5, 1800);
+    CreateWave(p, speak_wave_, Green());
 }
 
 void JotapeUi::Show(JotapeScreen screen) {
@@ -635,25 +627,11 @@ void JotapeUi::SetMessage(const char* content) {
     }
     const char* text = normalized.c_str();
     lv_label_set_text(terminal_message_, text);
-    lv_label_set_text(subtitle_label_, text);
-    if (text[0] == '\0' || subtitle_hidden_) {
-        lv_obj_add_flag(subtitle_box_, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_remove_flag(subtitle_box_, LV_OBJ_FLAG_HIDDEN);
-    }
 }
 
 void JotapeUi::SetSubtitleHidden(bool hidden) {
+    // The JOTAPE layout shows no subtitles; kept for the Display interface.
     subtitle_hidden_ = hidden;
-    if (subtitle_box_ == nullptr) {
-        return;
-    }
-    const char* text = lv_label_get_text(subtitle_label_);
-    if (hidden || text == nullptr || text[0] == '\0') {
-        lv_obj_add_flag(subtitle_box_, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_remove_flag(subtitle_box_, LV_OBJ_FLAG_HIDDEN);
-    }
 }
 
 void JotapeUi::SetEmotion(const char* emotion) {
@@ -786,12 +764,9 @@ void JotapeUi::OnTimer() {
     }
 
     if (current_ == JotapeScreen::kListening) {
-        for (int i = 0; i < 10; i++) {
-            const int h = 6 + Random() % 42;
-            lv_obj_set_height(bars_[i], h);
-            lv_obj_set_y(bars_[i], 140 - h / 2);
-        }
+        UpdateWave(listen_wave_);
     } else if (current_ == JotapeScreen::kSpeaking) {
+        UpdateWave(speak_wave_);
         speak_face_.SetTalkLevel(Random() % 101);
     }
 }

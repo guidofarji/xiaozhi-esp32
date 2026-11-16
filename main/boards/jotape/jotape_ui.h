@@ -31,12 +31,14 @@ enum class JotapeMenuItem {
     kCount,
 };
 
+enum class JotapeFaceSize { kSmall, kBig, kXL };
+
 // JOTAPE's head: a fixed helmet image with glowing eyes drawn on its empty
 // face screen. Eyes are either rounded bars/dots (animatable) or small tinted
 // shape images (^, > <, hearts, spirals...).
 class JotapeFace {
 public:
-    void Create(lv_obj_t* parent, bool big);
+    void Create(lv_obj_t* parent, JotapeFaceSize size);
     lv_obj_t* root() const { return root_; }
     void SetExpression(const char* emotion);
     void SetEyesClosed(bool closed);  // blink
@@ -54,7 +56,7 @@ private:
     void Apply();
     const lv_image_dsc_t* Shape(const char* name) const;
 
-    bool big_ = true;
+    JotapeFaceSize size_ = JotapeFaceSize::kBig;
     lv_obj_t* root_ = nullptr;
     lv_obj_t* screen_ = nullptr;
     lv_obj_t* bars_[2] = {};
@@ -118,6 +120,9 @@ private:
     lv_obj_t* NewLabel(lv_obj_t* parent, const lv_font_t* font, lv_color_t color, const char* text);
     void AddFrame(lv_obj_t* parent, int x, int y, int w, int h, bool green_border);
     void AddBracket(lv_obj_t* parent, int x, int y, bool right, bool bottom, int len);
+    void CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color);
+    void UpdateWave(lv_obj_t** bars);
+    static void AddFloat(lv_obj_t* obj, int base_y, int amplitude, uint32_t period_ms);
 
     void CreateBoot();
     void CreateTerminal();
@@ -169,9 +174,8 @@ private:
     lv_obj_t* menu_texts_[static_cast<int>(JotapeMenuItem::kCount)] = {};
     lv_obj_t* menu_icons_[static_cast<int>(JotapeMenuItem::kCount)] = {};
     int menu_selected_ = 0;
-    lv_obj_t* bars_[10] = {};
-    lv_obj_t* subtitle_box_ = nullptr;
-    lv_obj_t* subtitle_label_ = nullptr;
+    lv_obj_t* listen_wave_[10] = {};
+    lv_obj_t* speak_wave_[10] = {};
     lv_obj_t* toast_ = nullptr;
     lv_obj_t* toast_label_ = nullptr;
     uint32_t toast_until_ = 0;

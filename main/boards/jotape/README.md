@@ -14,18 +14,20 @@ interfaz estilo terminal retro (`jotape_ui.*`, solo LVGL):
 
 | Pantalla | Cuándo aparece |
 |---|---|
-| Arranque | Al encender (2,5 s) |
-| Terminal | Conectando, configuración Wi-Fi, activación, actualización, errores |
-| Inicio (reloj) | En espera |
+| Arranque | Al encender (2,5 s): solo la cabeza flotando |
+| Terminal | Configuración Wi-Fi, activación, actualización, errores (con texto) |
+| Inicio (reloj) | En espera: fecha, Wi-Fi, batería, hora y la cabeza asomando abajo |
 | Funciones (menú) | Tocando la pantalla de inicio o deslizando a la izquierda |
-| Escuchando | Mientras te escucha |
-| Hablando | Mientras responde, con subtítulos |
+| Escuchando | Cabeza flotando + onda de audio naranja |
+| Hablando | Cabeza flotando + onda de audio verde, sin subtítulos |
+
+La onda de audio es una animación: no sigue el volumen real del micrófono.
 
 Desde el menú se vuelve deslizando a la derecha, tocando "HORA Y FECHA" o
 esperando 20 s. Las demás funciones muestran "PRÓXIMAMENTE".
 
 La cara de JOTAPE es un casco fijo (`jotape_helmet.c`, generado con IA y
-convertido a RGB565 en 112 y 60 px) con ojos dibujados encima en la pantalla
+convertido a RGB565 en 150, 112 y 60 px) con ojos dibujados encima en la pantalla
 vacía del casco. Los ojos son barras/puntos animados (parpadean, miran a los
 costados, laten al hablar) o formas A8 teñidas (`jotape_eyes.c`: ^ ^, > <,
 corazones, estrellas, espirales, enojado, triste, lágrima), según la emoción

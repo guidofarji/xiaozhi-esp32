@@ -7,6 +7,13 @@
 extern "C" {
 #endif
 
+extern const lv_image_dsc_t jotape_helmet_150;
+/* Empty face screen inside jotape_helmet_150: x, y, w, h */
+#define JOTAPE_HELMET_150_SCREEN_X 18
+#define JOTAPE_HELMET_150_SCREEN_Y 47
+#define JOTAPE_HELMET_150_SCREEN_W 114
+#define JOTAPE_HELMET_150_SCREEN_H 80
+
 extern const lv_image_dsc_t jotape_helmet_112;
 /* Empty face screen inside jotape_helmet_112: x, y, w, h */
 #define JOTAPE_HELMET_112_SCREEN_X 14
