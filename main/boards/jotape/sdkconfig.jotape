@@ -1,0 +1,34 @@
+# Configuración fija de JOTAPE.
+# Se aplica encima de sdkconfig.defaults / sdkconfig.defaults.esp32s3:
+#   idf.py -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;main/boards/jotape/sdkconfig.jotape" set-target esp32s3
+#
+# Ver main/boards/jotape/README.md
+
+# --- Placa ---
+CONFIG_BOARD_TYPE_JOTAPE=y
+CONFIG_USE_WECHAT_MESSAGE_STYLE=n
+CONFIG_USE_AUDIO_PROCESSOR=y
+CONFIG_USE_DEVICE_AEC=y
+
+# --- Idioma ---
+CONFIG_LANGUAGE_ES_ES=y
+
+# --- OTA ---
+# Servidor oficial (xiaozhi.me). Para un servidor propio, por ejemplo:
+# CONFIG_OTA_URL="http://192.168.1.10:8002/xiaozhi/ota/"
+CONFIG_OTA_URL="https://api.tenclass.net/xiaozhi/ota/"
+
+# --- Wake word "Jotape" (MultiNet, modelo en inglés) ---
+# MultiNet solo trae modelos en chino e inglés, por eso se escribe
+# con fonética inglesa. Umbral: más bajo = más sensible (1-99).
+CONFIG_WAKE_WORD_DISABLED=n
+CONFIG_USE_AFE_WAKE_WORD=n
+CONFIG_USE_CUSTOM_WAKE_WORD=y
+CONFIG_CUSTOM_WAKE_WORD="ho tah pay"
+CONFIG_CUSTOM_WAKE_WORD_DISPLAY="Jotape"
+CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20
+CONFIG_SEND_WAKE_WORD_DATA=y
+
+# Modelos ESP-SR: solo MultiNet7 en inglés
+CONFIG_SR_MN_CN_NONE=y
+CONFIG_SR_MN_EN_MULTINET7_QUANT=y
