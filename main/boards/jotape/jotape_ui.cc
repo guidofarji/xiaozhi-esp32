@@ -1,19 +1,25 @@
 #include "jotape_ui.h"
 
-#include "jotape_eyes.h"
-#include "jotape_helmet.h"
-
 #include <cstdio>
 #include <cstring>
 #include <string>
 
+#include "jotape_eyes.h"
+#include "jotape_glow.h"
+#include "jotape_helmet.h"
+
 LV_FONT_DECLARE(font_jotape_20);
 LV_FONT_DECLARE(font_jotape_30);
-LV_FONT_DECLARE(font_jotape_clock_80);
+LV_FONT_DECLARE(font_jotape_inter_14);
+LV_FONT_DECLARE(font_jotape_inter_18);
 LV_FONT_DECLARE(font_jotape_icons_22);
+LV_FONT_DECLARE(font_jotape_icons_30);
 LV_FONT_DECLARE(font_jotape_weather_64);
-LV_FONT_DECLARE(font_jotape_temp_64);
 LV_FONT_DECLARE(font_jotape_bigicons_72);
+LV_FONT_DECLARE(font_jotape_dots_3);
+LV_FONT_DECLARE(font_jotape_dots_5);
+LV_FONT_DECLARE(font_jotape_dots_6);
+LV_FONT_DECLARE(font_jotape_dots_7);
 
 namespace {
 
@@ -23,16 +29,19 @@ constexpr uint32_t kBootHoldMs = 2500;
 constexpr uint32_t kMenuTimeoutMs = 20000;
 constexpr uint32_t kTimerPeriodMs = 50;
 
-// Material Symbols glyphs in font_jotape_icons_22
-#define ICON_MIC "\xEE\x80\xA9"        // U+E029 mic
+// Material Symbols glyphs (font_jotape_icons_22 / _30)
 #define ICON_SCHEDULE "\xEE\xA2\xB5"   // U+E8B5 schedule
 #define ICON_CLOUD "\xEE\x8A\xBD"      // U+E2BD cloud
 #define ICON_BELL "\xEE\x9F\xB4"       // U+E7F4 notifications
 #define ICON_HOURGLASS "\xEE\xA2\x8B"  // U+E88B hourglass_empty
 #define ICON_NEWSPAPER "\xEE\xAE\x81"  // U+EB81 newspaper
 #define ICON_SETTINGS "\xEE\xA2\xB8"   // U+E8B8 settings
+#define BIG_ALARM "\xEE\xA1\x95"       // U+E855 alarm (72 px)
+#define BIG_HOURGLASS "\xEE\xA2\x8B"   // U+E88B (72 px)
+#define DEGREE "\xC2\xB0"
 
 lv_color_t Green() { return lv_color_hex(0x39FF88); }
+lv_color_t Mint() { return lv_color_hex(0xC8FFE0); }
 lv_color_t DimGreen() { return lv_color_hex(0x1E7A48); }
 lv_color_t Orange() { return lv_color_hex(0xFF8A1F); }
 lv_color_t Yellow() { return lv_color_hex(0xFFC93C); }
@@ -47,8 +56,8 @@ struct MenuEntry {
 };
 
 const MenuEntry kMenuEntries[] = {
-    {ICON_SCHEDULE, "HORA Y FECHA"},  {ICON_CLOUD, "CLIMA"},        {ICON_BELL, "ALARMAS"},
-    {ICON_HOURGLASS, "TEMPORIZADOR"}, {ICON_NEWSPAPER, "NOTICIAS"}, {ICON_SETTINGS, "AJUSTES"},
+    {ICON_SCHEDULE, "Hora"},   {ICON_CLOUD, "Clima"},        {ICON_BELL, "Alarmas"},
+    {ICON_HOURGLASS, "Timer"}, {ICON_NEWSPAPER, "Noticias"}, {ICON_SETTINGS, "Ajustes"},
 };
 
 // Plain object with no theme styles, not clickable or scrollable.
@@ -71,22 +80,10 @@ lv_obj_t* Rect(lv_obj_t* parent, int x, int y, int w, int h, lv_color_t color) {
 
 bool Is(const char* a, const char* b) { return strcmp(a, b) == 0; }
 
-// Uppercase for ASCII and Latin-1 letters encoded in UTF-8 (á -> Á, ñ -> Ñ).
-std::string Upper(const std::string& text) {
-    std::string out = text;
-    for (size_t i = 0; i < out.size(); i++) {
-        unsigned char c = out[i];
-        if (c >= 'a' && c <= 'z') {
-            out[i] = static_cast<char>(c - 32);
-        } else if (c == 0xC3 && i + 1 < out.size()) {
-            unsigned char n = out[i + 1];
-            if (n >= 0xA0 && n <= 0xBE && n != 0xB7) {
-                out[i + 1] = static_cast<char>(n - 0x20);
-            }
-            i++;
-        }
-    }
-    return out;
+// Smooth 0..255 oscillation for breathing effects.
+int Breath(uint32_t now, uint32_t period_ms) {
+    const int angle = static_cast<int>((now % period_ms) * 360 / period_ms);
+    return (lv_trigo_sin(angle) + LV_TRIGO_SIN_MAX) * 255 / (2 * LV_TRIGO_SIN_MAX);
 }
 
 // Material Symbols glyph for a WMO weather code.
@@ -400,19 +397,61 @@ lv_obj_t* JotapeUi::NewLabel(lv_obj_t* parent, const lv_font_t* font, lv_color_t
     return label;
 }
 
-void JotapeUi::AddFrame(lv_obj_t* parent, int x, int y, int w, int h, bool green_border) {
-    lv_obj_t* frame = Decor(parent);
-    lv_obj_set_pos(frame, x, y);
-    lv_obj_set_size(frame, w, h);
-    lv_obj_set_style_border_color(frame, green_border ? DimGreen() : Orange(), 0);
-    lv_obj_set_style_border_width(frame, 2, 0);
-    lv_obj_set_style_radius(frame, 6, 0);
+void JotapeUi::TintGlass(lv_obj_t* g, lv_color_t tint) {
+    lv_obj_set_style_bg_color(g, lv_color_mix(tint, lv_color_black(), 50), 0);
+    lv_obj_set_style_border_color(g, tint, 0);
+    lv_obj_set_style_shadow_color(g, tint, 0);
 }
 
-void JotapeUi::AddBracket(lv_obj_t* parent, int x, int y, bool right, bool bottom, int len) {
-    const int t = 3;
-    Rect(parent, right ? x - len + 1 : x, bottom ? y - t + 1 : y, len, t, Orange());
-    Rect(parent, right ? x - t + 1 : x, bottom ? y - len + 1 : y, t, len, Orange());
+lv_obj_t* JotapeUi::Glass(lv_obj_t* parent, int x, int y, int w, int h, int radius,
+                          lv_color_t tint) {
+    lv_obj_t* g = Decor(parent);
+    lv_obj_set_pos(g, x, y);
+    lv_obj_set_size(g, w, h);
+    lv_obj_set_style_radius(g, radius, 0);
+    lv_obj_set_style_bg_grad_color(g, lv_color_hex(0x030605), 0);
+    lv_obj_set_style_bg_grad_dir(g, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_opa(g, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(g, 1, 0);
+    lv_obj_set_style_border_opa(g, LV_OPA_40, 0);
+    lv_obj_set_style_shadow_width(g, 14, 0);
+    lv_obj_set_style_shadow_opa(g, LV_OPA_20, 0);
+    TintGlass(g, tint);
+
+    // Glass sheen: white highlight fading out over the top half
+    lv_obj_t* sheen = Decor(g);
+    lv_obj_add_flag(sheen, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_pos(sheen, 0, 0);
+    lv_obj_set_size(sheen, lv_pct(100), lv_pct(45));
+    lv_obj_set_style_radius(sheen, radius > 1 ? radius - 1 : 0, 0);
+    lv_obj_set_style_bg_color(sheen, lv_color_white(), 0);
+    lv_obj_set_style_bg_grad_color(sheen, lv_color_white(), 0);
+    lv_obj_set_style_bg_main_opa(sheen, 26, 0);
+    lv_obj_set_style_bg_grad_opa(sheen, 0, 0);
+    lv_obj_set_style_bg_grad_dir(sheen, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_opa(sheen, LV_OPA_COVER, 0);
+    return g;
+}
+
+lv_obj_t* JotapeUi::NewGlow(lv_obj_t* parent, lv_color_t color) {
+    lv_obj_t* glow = lv_image_create(parent);
+    lv_image_set_src(glow, &jotape_glow_200);
+    lv_obj_remove_flag(glow, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_image_recolor(glow, color, 0);
+    lv_obj_set_style_image_recolor_opa(glow, LV_OPA_COVER, 0);
+    lv_obj_set_style_image_opa(glow, LV_OPA_50, 0);
+    return glow;
+}
+
+lv_obj_t* JotapeUi::NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h) {
+    lv_obj_t* btn = Glass(parent, x, y, w, h, h / 2, Orange());
+    lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_border_opa(btn, LV_OPA_COVER, LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_opa(btn, LV_OPA_60, LV_STATE_PRESSED);
+    lv_obj_t* label = NewLabel(btn, &text14_, Mint(), text);
+    lv_obj_center(label);
+    lv_obj_add_event_cb(btn, TimerButtonCb, LV_EVENT_CLICKED, this);
+    return btn;
 }
 
 void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
@@ -421,8 +460,9 @@ void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
     lv_obj_set_style_bg_opa(screen_, LV_OPA_COVER, 0);
     lv_obj_remove_flag(screen_, LV_OBJ_FLAG_SCROLLABLE);
 
-    font20_ = font_jotape_20;
-    font30_ = font_jotape_30;
+    text14_ = font_jotape_inter_14;
+    text18_ = font_jotape_inter_18;
+    dots3_ = font_jotape_dots_3;
     UpdateFonts(fonts);
 
     CreateBoot();
@@ -436,19 +476,14 @@ void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
     CreateTimer();
     CreateRinging();
 
-    // Toast on top of every panel
-    toast_ = Decor(screen_);
+    // Toast: glass pill above every panel
+    toast_ = Glass(screen_, 0, 0, 10, 10, 16, Orange());
     lv_obj_set_size(toast_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(toast_, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(toast_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(toast_, Orange(), 0);
-    lv_obj_set_style_border_width(toast_, 2, 0);
-    lv_obj_set_style_radius(toast_, 4, 0);
-    lv_obj_set_style_pad_hor(toast_, 10, 0);
-    lv_obj_set_style_pad_ver(toast_, 4, 0);
-    lv_obj_align(toast_, LV_ALIGN_BOTTOM_MID, 0, -12);
-    toast_label_ = NewLabel(toast_, &font20_, Orange(), "");
-    lv_obj_set_style_max_width(toast_label_, kWidth - 40, 0);
+    lv_obj_set_style_pad_hor(toast_, 14, 0);
+    lv_obj_set_style_pad_ver(toast_, 6, 0);
+    lv_obj_align(toast_, LV_ALIGN_BOTTOM_MID, 0, -14);
+    toast_label_ = NewLabel(toast_, &text14_, Orange(), "");
+    lv_obj_set_style_max_width(toast_label_, kWidth - 50, 0);
     lv_label_set_long_mode(toast_label_, LV_LABEL_LONG_WRAP);
     lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
 
@@ -461,8 +496,9 @@ void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
 }
 
 void JotapeUi::UpdateFonts(const Fonts& fonts) {
-    font20_.fallback = fonts.fallback_text;
-    font30_.fallback = fonts.fallback_text;
+    text14_.fallback = fonts.fallback_text;
+    text18_.fallback = fonts.fallback_text;
+    dots3_.fallback = &text14_;
     if (fonts.status_icons != nullptr) {
         lv_obj_t* labels[] = {network_label_, battery_label_, mute_label_};
         for (auto label : labels) {
@@ -471,142 +507,10 @@ void JotapeUi::UpdateFonts(const Fonts& fonts) {
             }
         }
     }
-    // Labels cache glyph metrics: force a relayout with the new fallback.
     if (screen_ != nullptr) {
         lv_obj_report_style_change(nullptr);
     }
     status_icon_font_ = fonts.status_icons;
-}
-
-void JotapeUi::CreateBoot() {
-    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kBoot)] = NewPanel(screen_);
-    boot_face_.Create(p, JotapeFaceSize::kXL);
-    lv_obj_align(boot_face_.root(), LV_ALIGN_CENTER, 0, 0);
-    AddFloat(boot_face_.root(), 0, 5, 1800);
-}
-
-void JotapeUi::CreateTerminal() {
-    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kTerminal)] = NewPanel(screen_);
-    AddFrame(p, 4, 4, 232, 232, true);
-    AddBracket(p, 10, 229, false, true, 14);
-    AddBracket(p, 229, 229, true, true, 14);
-
-    lv_obj_t* title = NewLabel(p, &font30_, Green(), "JOTAPE");
-    lv_obj_set_style_text_letter_space(title, 4, 0);
-    lv_obj_set_pos(title, 14, 8);
-
-    terminal_status_ = NewLabel(p, &font20_, Orange(), "> INICIANDO...");
-    lv_obj_set_size(terminal_status_, 212, 22);
-    lv_label_set_long_mode(terminal_status_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_pos(terminal_status_, 14, 40);
-
-    terminal_face_.Create(p, JotapeFaceSize::kSmall);
-    lv_obj_align(terminal_face_.root(), LV_ALIGN_TOP_MID, 0, 60);
-
-    terminal_message_ = NewLabel(p, &font20_, Green(), "");
-    lv_obj_set_size(terminal_message_, 216, 110);
-    lv_label_set_long_mode(terminal_message_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(terminal_message_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(terminal_message_, 12, 122);
-}
-
-void JotapeUi::CreateHome() {
-    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kHome)] = NewPanel(screen_);
-    lv_obj_add_event_cb(p, HomeClickCb, LV_EVENT_CLICKED, this);
-
-    date_label_ = NewLabel(p, &font20_, Green(), "");
-    lv_obj_set_style_text_letter_space(date_label_, 1, 0);
-    lv_obj_set_pos(date_label_, 14, 10);
-
-    lv_obj_t* icons = Decor(p);
-    lv_obj_set_size(icons, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(icons, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(icons, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(icons, 4, 0);
-    lv_obj_align(icons, LV_ALIGN_TOP_RIGHT, -12, 9);
-    const lv_font_t* icon_font = status_icon_font_ != nullptr ? status_icon_font_ : &font20_;
-    mute_label_ = NewLabel(icons, icon_font, Green(), "");
-    network_label_ = NewLabel(icons, icon_font, Green(), "");
-    battery_label_ = NewLabel(icons, icon_font, Green(), "");
-
-    clock_label_ = NewLabel(p, &font_jotape_clock_80, Green(), "--:--");
-    lv_obj_set_style_text_letter_space(clock_label_, 2, 0);
-    lv_obj_align(clock_label_, LV_ALIGN_TOP_MID, 0, 36);
-
-    home_info_ = Decor(p);
-    lv_obj_set_size(home_info_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(home_info_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(home_info_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(home_info_, 4, 0);
-    lv_obj_align(home_info_, LV_ALIGN_TOP_MID, 0, 116);
-    home_info_icon_ = NewLabel(home_info_, &font_jotape_icons_22, Orange(), ICON_BELL);
-    home_info_text_ = NewLabel(home_info_, &font20_, Orange(), "");
-    lv_obj_add_flag(home_info_, LV_OBJ_FLAG_HIDDEN);
-
-    home_face_.Create(p, JotapeFaceSize::kBig);
-    lv_obj_align(home_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 26);
-    AddFloat(home_face_.root(), 26, 3, 2200);
-}
-
-void JotapeUi::CreateMenu() {
-    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kMenu)] = NewPanel(screen_);
-
-    lv_obj_t* slashes = NewLabel(p, &font30_, Orange(), "//");
-    lv_obj_set_pos(slashes, 12, 6);
-    lv_obj_t* title = NewLabel(p, &font30_, Green(), "FUNCIONES");
-    lv_obj_set_style_text_letter_space(title, 1, 0);
-    lv_obj_set_pos(title, 44, 6);
-    Rect(p, 12, 42, 216, 2, DimGreen());
-
-    for (int i = 0; i < static_cast<int>(JotapeMenuItem::kCount); i++) {
-        lv_obj_t* row = lv_obj_create(p);
-        lv_obj_remove_style_all(row);
-        lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_pos(row, 10, 50 + i * 31);
-        lv_obj_set_size(row, 220, 28);
-        lv_obj_set_style_radius(row, 4, 0);
-        lv_obj_set_style_border_color(row, Orange(), 0);
-        lv_obj_set_style_border_width(row, 0, 0);
-        lv_obj_add_event_cb(row, MenuRowCb, LV_EVENT_PRESSED, this);
-        lv_obj_add_event_cb(row, MenuRowCb, LV_EVENT_CLICKED, this);
-        menu_rows_[i] = row;
-
-        menu_icons_[i] = NewLabel(row, &font_jotape_icons_22, Green(), kMenuEntries[i].icon);
-        lv_obj_align(menu_icons_[i], LV_ALIGN_LEFT_MID, 8, 0);
-        menu_texts_[i] = NewLabel(row, &font20_, Green(), kMenuEntries[i].text);
-        lv_obj_align(menu_texts_[i], LV_ALIGN_LEFT_MID, 40, 0);
-    }
-    SelectMenuRow(0);
-}
-
-void JotapeUi::CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color) {
-    for (int i = 0; i < 10; i++) {
-        const int x = i < 5 ? 12 + i * 6 : 198 + (i - 5) * 6;
-        bars[i] = Rect(parent, x, kHeight / 2 - 4, 3, 8, color);
-        lv_obj_set_style_radius(bars[i], 1, 0);
-        lv_obj_add_flag(bars[i], LV_OBJ_FLAG_HIDDEN);  // only shown with sound
-    }
-}
-
-void JotapeUi::UpdateWave(lv_obj_t** bars, int level) {
-    for (int i = 0; i < 10; i++) {
-        // Taller towards the head, like a sound wave; scaled by loudness
-        const int idx = i < 5 ? i : 9 - i;
-        const int max_h = (20 + idx * 10) * level / 100;
-        const int h = 4 + (max_h > 0 ? static_cast<int>(Random() % (max_h + 1)) : 0);
-        lv_obj_set_height(bars[i], h);
-        lv_obj_set_y(bars[i], kHeight / 2 - h / 2);
-        lv_obj_remove_flag(bars[i], LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-void JotapeUi::HideWave(lv_obj_t** bars) {
-    for (int i = 0; i < 10; i++) {
-        if (!lv_obj_has_flag(bars[i], LV_OBJ_FLAG_HIDDEN)) {
-            lv_obj_add_flag(bars[i], LV_OBJ_FLAG_HIDDEN);
-        }
-    }
 }
 
 void JotapeUi::AddFloat(lv_obj_t* obj, int base_y, int amplitude, uint32_t period_ms) {
@@ -623,8 +527,53 @@ void JotapeUi::AddFloat(lv_obj_t* obj, int base_y, int amplitude, uint32_t perio
     lv_anim_start(&a);
 }
 
+/* ---- Boot / listening / speaking: floating head with a glow ---- */
+
+void JotapeUi::CreateBoot() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kBoot)] = NewPanel(screen_);
+    boot_glow_ = NewGlow(p, Green());
+    lv_obj_center(boot_glow_);
+    boot_face_.Create(p, JotapeFaceSize::kXL);
+    lv_obj_align(boot_face_.root(), LV_ALIGN_CENTER, 0, 0);
+    AddFloat(boot_face_.root(), 0, 5, 1800);
+}
+
+void JotapeUi::CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color) {
+    for (int i = 0; i < 10; i++) {
+        const int x = i < 5 ? 8 + i * 7 : 199 + (i - 5) * 7;
+        bars[i] = Rect(parent, x, kHeight / 2 - 4, 5, 8, lv_color_white());
+        lv_obj_set_style_radius(bars[i], LV_RADIUS_CIRCLE, 0);
+        // Capsule with a bright core fading into the palette color
+        lv_obj_set_style_bg_color(bars[i], lv_color_mix(lv_color_white(), color, 110), 0);
+        lv_obj_set_style_bg_grad_color(bars[i], color, 0);
+        lv_obj_set_style_bg_grad_dir(bars[i], LV_GRAD_DIR_VER, 0);
+        lv_obj_add_flag(bars[i], LV_OBJ_FLAG_HIDDEN);  // only shown with sound
+    }
+}
+
+void JotapeUi::UpdateWave(lv_obj_t** bars, int level) {
+    for (int i = 0; i < 10; i++) {
+        const int idx = i < 5 ? i : 9 - i;  // taller towards the head
+        const int max_h = (22 + idx * 12) * level / 100;
+        const int h = 5 + (max_h > 0 ? static_cast<int>(Random() % (max_h + 1)) : 0);
+        lv_obj_set_height(bars[i], h);
+        lv_obj_set_y(bars[i], kHeight / 2 - h / 2);
+        lv_obj_remove_flag(bars[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void JotapeUi::HideWave(lv_obj_t** bars) {
+    for (int i = 0; i < 10; i++) {
+        if (!lv_obj_has_flag(bars[i], LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(bars[i], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
 void JotapeUi::CreateListening() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kListening)] = NewPanel(screen_);
+    listen_glow_ = NewGlow(p, Orange());
+    lv_obj_center(listen_glow_);
     listen_face_.Create(p, JotapeFaceSize::kXL);
     lv_obj_align(listen_face_.root(), LV_ALIGN_CENTER, 0, 0);
     AddFloat(listen_face_.root(), 0, 5, 1800);
@@ -633,188 +582,251 @@ void JotapeUi::CreateListening() {
 
 void JotapeUi::CreateSpeaking() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kSpeaking)] = NewPanel(screen_);
+    speak_glow_ = NewGlow(p, Green());
+    lv_obj_center(speak_glow_);
     speak_face_.Create(p, JotapeFaceSize::kXL);
     lv_obj_align(speak_face_.root(), LV_ALIGN_CENTER, 0, 0);
     AddFloat(speak_face_.root(), 0, 5, 1800);
     CreateWave(p, speak_wave_, Green());
 }
 
+/* ---- Terminal: Wi-Fi setup, activation, errors ---- */
+
+void JotapeUi::CreateTerminal() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kTerminal)] = NewPanel(screen_);
+    lv_obj_t* card = Glass(p, 8, 8, 224, 224, 24, Green());
+
+    lv_obj_t* title = NewLabel(card, &dots3_, Green(), "JOTAPE");
+    lv_obj_set_pos(title, 16, 16);
+    terminal_status_ = NewLabel(card, &text14_, Orange(), "Iniciando...");
+    lv_obj_set_size(terminal_status_, 120, text14_.line_height);
+    lv_label_set_long_mode(terminal_status_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_pos(terminal_status_, 16, 42);
+
+    terminal_face_.Create(card, JotapeFaceSize::kSmall);
+    lv_obj_align(terminal_face_.root(), LV_ALIGN_TOP_RIGHT, -12, 8);
+
+    terminal_message_ = NewLabel(card, &text14_, Mint(), "");
+    lv_obj_set_size(terminal_message_, 196, 136);
+    lv_label_set_long_mode(terminal_message_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(terminal_message_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_line_space(terminal_message_, 2, 0);
+    lv_obj_set_pos(terminal_message_, 13, 76);
+}
+
+/* ---- Home: dot-matrix clock and the head peeking from below ---- */
+
+void JotapeUi::CreateHome() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kHome)] = NewPanel(screen_);
+    lv_obj_add_event_cb(p, HomeClickCb, LV_EVENT_CLICKED, this);
+
+    home_glow_ = NewGlow(p, Green());
+    lv_obj_align(home_glow_, LV_ALIGN_BOTTOM_MID, 0, 70);
+
+    lv_obj_t* pill = Glass(p, 12, 8, 216, 30, 15, Green());
+    date_label_ = NewLabel(pill, &text14_, Mint(), "");
+    lv_obj_align(date_label_, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_t* icons = Decor(pill);
+    lv_obj_set_size(icons, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(icons, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(icons, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(icons, 4, 0);
+    lv_obj_align(icons, LV_ALIGN_RIGHT_MID, -10, 0);
+    const lv_font_t* icon_font = status_icon_font_ != nullptr ? status_icon_font_ : &text14_;
+    mute_label_ = NewLabel(icons, icon_font, Mint(), "");
+    network_label_ = NewLabel(icons, icon_font, Mint(), "");
+    battery_label_ = NewLabel(icons, icon_font, Mint(), "");
+
+    // Two-tone dot-matrix clock: hours green, minutes orange
+    lv_obj_t* clock = Decor(p);
+    lv_obj_set_size(clock, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(clock, LV_FLEX_FLOW_ROW);
+    lv_obj_align(clock, LV_ALIGN_TOP_MID, 0, 52);
+    clock_hours_ = NewLabel(clock, &font_jotape_dots_7, Green(), "--");
+    NewLabel(clock, &font_jotape_dots_7, Mint(), ":");
+    clock_minutes_ = NewLabel(clock, &font_jotape_dots_7, Orange(), "--");
+
+    home_info_ = Glass(p, 0, 0, 10, 10, 13, Orange());
+    lv_obj_set_size(home_info_, LV_SIZE_CONTENT, 26);
+    lv_obj_set_style_pad_hor(home_info_, 12, 0);
+    lv_obj_set_flex_flow(home_info_, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(home_info_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(home_info_, 4, 0);
+    lv_obj_align(home_info_, LV_ALIGN_TOP_MID, 0, 120);
+    home_info_icon_ = NewLabel(home_info_, &font_jotape_icons_22, Orange(), ICON_BELL);
+    home_info_text_ = NewLabel(home_info_, &text14_, Orange(), "");
+    lv_obj_add_flag(home_info_, LV_OBJ_FLAG_HIDDEN);
+
+    home_face_.Create(p, JotapeFaceSize::kBig);
+    lv_obj_align(home_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 26);
+    AddFloat(home_face_.root(), 26, 3, 2200);
+}
+
+/* ---- Menu: grid of glass tiles ---- */
+
+void JotapeUi::CreateMenu() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kMenu)] = NewPanel(screen_);
+    lv_obj_t* title = NewLabel(p, &dots3_, Green(), "FUNCIONES");
+    lv_obj_set_pos(title, 14, 12);
+
+    for (int i = 0; i < static_cast<int>(JotapeMenuItem::kCount); i++) {
+        const int x = 12 + (i % 3) * 76;
+        const int y = 40 + (i / 3) * 96;
+        lv_obj_t* tile = Glass(p, x, y, 68, 88, 18, i == 0 ? Orange() : Green());
+        lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_border_color(tile, Orange(), LV_STATE_PRESSED);
+        lv_obj_set_style_border_opa(tile, LV_OPA_COVER, LV_STATE_PRESSED);
+        lv_obj_set_style_shadow_opa(tile, LV_OPA_60, LV_STATE_PRESSED);
+        lv_obj_add_event_cb(tile, MenuTileCb, LV_EVENT_CLICKED, this);
+        menu_tiles_[i] = tile;
+
+        lv_obj_t* icon = NewLabel(tile, &font_jotape_icons_30, i == 0 ? Orange() : Green(),
+                                  kMenuEntries[i].icon);
+        lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 14);
+        lv_obj_t* text = NewLabel(tile, &text14_, Mint(), kMenuEntries[i].text);
+        lv_obj_align(text, LV_ALIGN_BOTTOM_MID, 0, -12);
+    }
+}
+
+/* ---- Weather card ---- */
+
 void JotapeUi::CreateWeather() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kWeather)] = NewPanel(screen_);
-    lv_obj_add_event_cb(p, WeatherClickCb, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(p, BackHomeCb, LV_EVENT_CLICKED, this);
+    weather_card_ = Glass(p, 8, 8, 224, 224, 26, Green());
+    lv_obj_add_flag(weather_card_, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    lv_obj_t* header = Decor(p);
-    lv_obj_set_size(header, 216, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(header, 8, 0);
-    lv_obj_set_pos(header, 12, 6);
-    NewLabel(header, &font30_, Orange(), "CLIMA");
-    weather_city_ = NewLabel(header, &font30_, Green(), "");
-    lv_obj_set_flex_grow(weather_city_, 1);
-    lv_obj_set_height(weather_city_, font_jotape_30.line_height);
+    lv_obj_t* title = NewLabel(weather_card_, &dots3_, Orange(), "CLIMA");
+    lv_obj_set_pos(title, 18, 16);
+    weather_city_ = NewLabel(weather_card_, &text18_, Mint(), "");
+    lv_obj_set_size(weather_city_, 188, text18_.line_height);
     lv_label_set_long_mode(weather_city_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    Rect(p, 12, 42, 216, 2, DimGreen());
+    lv_obj_set_pos(weather_city_, 18, 38);
 
-    weather_icon_ = NewLabel(p, &font_jotape_weather_64, Green(), "");
-    lv_obj_set_pos(weather_icon_, 16, 52);
-    weather_temp_ = NewLabel(p, &font_jotape_temp_64, Green(),
-                             "--\xC2\xB0"
-                             "C");
-    lv_obj_align(weather_temp_, LV_ALIGN_TOP_RIGHT, -14, 56);
+    weather_icon_ = NewLabel(weather_card_, &font_jotape_weather_64, Green(), "");
+    lv_obj_set_pos(weather_icon_, 12, 70);
+    weather_temp_ = NewLabel(weather_card_, &font_jotape_dots_6, Mint(), "--" DEGREE);
+    lv_obj_align(weather_temp_, LV_ALIGN_TOP_RIGHT, -16, 86);
 
-    weather_range_ = NewLabel(p, &font20_, Green(), "");
-    lv_obj_align(weather_range_, LV_ALIGN_TOP_MID, 0, 136);
-    Rect(p, 12, 166, 216, 2, DimGreen());
+    lv_obj_t* max_pill = Glass(weather_card_, 14, 150, 94, 28, 14, Orange());
+    weather_max_ = NewLabel(max_pill, &text14_, Orange(), "");
+    lv_obj_center(weather_max_);
+    lv_obj_t* min_pill = Glass(weather_card_, 116, 150, 94, 28, 14, Green());
+    weather_min_ = NewLabel(min_pill, &text14_, Green(), "");
+    lv_obj_center(weather_min_);
 
-    weather_desc_ = NewLabel(p, &font20_, Green(), "BUSCANDO UBICACIÓN...");
-    lv_obj_set_width(weather_desc_, 216);
+    weather_desc_ = NewLabel(weather_card_, &text14_, Mint(), "Buscando ubicación...");
+    lv_obj_set_width(weather_desc_, 196);
     lv_label_set_long_mode(weather_desc_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(weather_desc_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(weather_desc_, 12, 178);
+    lv_obj_set_pos(weather_desc_, 14, 190);
 }
 
 void JotapeUi::SetWeather(const JotapeWeatherView& weather) {
-    if (weather_city_ == nullptr) {
+    if (weather_card_ == nullptr) {
         return;
     }
-    if (weather.city.empty()) {
-        lv_label_set_text(weather_city_, "");
-    } else {
-        lv_label_set_text(weather_city_, ("\xC2\xB7 " + Upper(weather.city)).c_str());
-    }
+    lv_label_set_text(weather_city_, weather.city.c_str());
     if (!weather.valid) {
         lv_label_set_text(weather_icon_, "");
-        lv_label_set_text(weather_temp_,
-                          "--\xC2\xB0"
-                          "C");
-        lv_label_set_text(weather_range_, "");
-        lv_label_set_text(weather_desc_, Upper(weather.status).c_str());
+        lv_label_set_text(weather_temp_, "--" DEGREE);
+        lv_label_set_text(weather_max_, "");
+        lv_label_set_text(weather_min_, "");
+        lv_label_set_text(weather_desc_, weather.status.c_str());
         return;
     }
-    lv_label_set_text(weather_icon_, WeatherIcon(weather.weather_code, weather.is_day));
     const bool sunny = weather.weather_code <= 1 && weather.is_day;
+    TintGlass(weather_card_, sunny ? Orange() : Green());
+    lv_label_set_text(weather_icon_, WeatherIcon(weather.weather_code, weather.is_day));
     lv_obj_set_style_text_color(weather_icon_, sunny ? Yellow() : Green(), 0);
-    lv_label_set_text_fmt(weather_temp_,
-                          "%d\xC2\xB0"
-                          "C",
-                          weather.temperature);
-    lv_label_set_text_fmt(weather_range_,
-                          "MÁX %d\xC2\xB0"
-                          "C / MÍN %d\xC2\xB0"
-                          "C",
-                          weather.temp_max, weather.temp_min);
-    lv_label_set_text(weather_desc_, Upper(weather.description).c_str());
+    lv_label_set_text_fmt(weather_temp_, "%d" DEGREE, weather.temperature);
+    lv_label_set_text_fmt(weather_max_, "Máx %d" DEGREE, weather.temp_max);
+    lv_label_set_text_fmt(weather_min_, "Mín %d" DEGREE, weather.temp_min);
+    lv_label_set_text(weather_desc_, weather.description.c_str());
 }
 
-void JotapeUi::WeatherClickCb(lv_event_t* e) {
-    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
-    if (self->current_ == JotapeScreen::kWeather || self->current_ == JotapeScreen::kAlarms) {
-        self->Show(JotapeScreen::kHome);
-    }
-}
-
-lv_obj_t* JotapeUi::NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h) {
-    lv_obj_t* btn = lv_obj_create(parent);
-    lv_obj_remove_style_all(btn);
-    lv_obj_remove_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_pos(btn, x, y);
-    lv_obj_set_size(btn, w, h);
-    lv_obj_set_style_radius(btn, 6, 0);
-    lv_obj_set_style_border_color(btn, Orange(), 0);
-    lv_obj_set_style_border_width(btn, 2, 0);
-    lv_obj_set_style_bg_color(btn, Orange(), LV_STATE_PRESSED);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_40, LV_STATE_PRESSED);
-    lv_obj_t* label = NewLabel(btn, &font20_, Green(), text);
-    lv_obj_center(label);
-    lv_obj_add_event_cb(btn, TimerButtonCb, LV_EVENT_CLICKED, this);
-    return btn;
-}
-
-static void AddHeader(lv_obj_t* p, const lv_font_t* font, const char* title, lv_color_t slash,
-                      lv_color_t text, lv_color_t line) {
-    lv_obj_t* slashes = lv_label_create(p);
-    lv_obj_set_style_text_font(slashes, font, 0);
-    lv_obj_set_style_text_color(slashes, slash, 0);
-    lv_label_set_text(slashes, "//");
-    lv_obj_set_pos(slashes, 12, 6);
-    lv_obj_t* label = lv_label_create(p);
-    lv_obj_set_style_text_font(label, font, 0);
-    lv_obj_set_style_text_color(label, text, 0);
-    lv_label_set_text(label, title);
-    lv_obj_set_pos(label, 44, 6);
-    lv_obj_t* rule = lv_obj_create(p);
-    lv_obj_remove_style_all(rule);
-    lv_obj_remove_flag(rule, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(rule, 12, 42);
-    lv_obj_set_size(rule, 216, 2);
-    lv_obj_set_style_bg_color(rule, line, 0);
-    lv_obj_set_style_bg_opa(rule, LV_OPA_COVER, 0);
-}
+/* ---- Alarms ---- */
 
 void JotapeUi::CreateAlarms() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kAlarms)] = NewPanel(screen_);
-    lv_obj_add_event_cb(p, WeatherClickCb, LV_EVENT_CLICKED, this);  // tap: back home
-    AddHeader(p, &font30_, "ALARMAS", Orange(), Green(), DimGreen());
-    for (int i = 0; i < 6; i++) {
-        alarm_rows_[i] = NewLabel(p, &font20_, Green(), "");
-        lv_obj_set_width(alarm_rows_[i], 216);
-        lv_label_set_long_mode(alarm_rows_[i], LV_LABEL_LONG_DOT);
-        lv_obj_set_pos(alarm_rows_[i], 14, 52 + i * 30);
+    lv_obj_add_event_cb(p, BackHomeCb, LV_EVENT_CLICKED, this);
+    lv_obj_t* title = NewLabel(p, &dots3_, Green(), "ALARMAS");
+    lv_obj_set_pos(title, 14, 12);
+
+    for (int i = 0; i < 5; i++) {
+        alarm_rows_[i] = Glass(p, 12, 38 + i * 39, 216, 33, 16, Green());
+        alarm_times_[i] = NewLabel(alarm_rows_[i], &text18_, Mint(), "");
+        lv_obj_align(alarm_times_[i], LV_ALIGN_LEFT_MID, 14, 0);
+        alarm_infos_[i] = NewLabel(alarm_rows_[i], &text14_, Green(), "");
+        lv_obj_set_width(alarm_infos_[i], 128);
+        lv_label_set_long_mode(alarm_infos_[i], LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(alarm_infos_[i], LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_align(alarm_infos_[i], LV_ALIGN_RIGHT_MID, -14, 0);
+        lv_obj_add_flag(alarm_rows_[i], LV_OBJ_FLAG_HIDDEN);
     }
-    alarm_empty_ = NewLabel(p, &font20_, Green(),
-                            "SIN ALARMAS\n\nDECILE A JOTAPE:\n\"PONÉ UNA ALARMA\nA LAS 7:30\"");
-    lv_obj_set_width(alarm_empty_, 216);
+    alarm_empty_ = NewLabel(p, &text14_, Mint(),
+                            "Sin alarmas\n\nDecile a JOTAPE:\n\"Poné una alarma a las 7:30\"");
+    lv_obj_set_width(alarm_empty_, 200);
     lv_obj_set_style_text_align(alarm_empty_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(alarm_empty_, LV_ALIGN_TOP_MID, 0, 70);
+    lv_obj_align(alarm_empty_, LV_ALIGN_CENTER, 0, 10);
 }
+
+/* ---- Timer: progress ring ---- */
 
 void JotapeUi::CreateTimer() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kTimer)] = NewPanel(screen_);
-    AddHeader(p, &font30_, "TEMPORIZADOR", Orange(), Green(), DimGreen());
+    timer_arc_ = lv_arc_create(p);
+    lv_obj_remove_style_all(timer_arc_);
+    lv_obj_remove_flag(timer_arc_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(timer_arc_, 166, 166);
+    lv_obj_align(timer_arc_, LV_ALIGN_TOP_MID, 0, 16);
+    lv_arc_set_rotation(timer_arc_, 270);
+    lv_arc_set_bg_angles(timer_arc_, 0, 360);
+    lv_arc_set_range(timer_arc_, 0, 1000);
+    lv_arc_set_value(timer_arc_, 0);
+    lv_obj_set_style_arc_width(timer_arc_, 10, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(timer_arc_, DimGreen(), LV_PART_MAIN);
+    lv_obj_set_style_arc_opa(timer_arc_, LV_OPA_50, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(timer_arc_, 10, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(timer_arc_, Green(), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(timer_arc_, true, LV_PART_INDICATOR);
 
-    timer_count_ = NewLabel(p, &font_jotape_clock_80, Green(), "00:00");
-    lv_obj_set_style_text_letter_space(timer_count_, 2, 0);
-    lv_obj_align(timer_count_, LV_ALIGN_TOP_MID, 0, 44);
-
-    Rect(p, 20, 128, 200, 6, lv_color_hex(0x0E3A22));
-    timer_bar_ = Rect(p, 20, 128, 0, 6, Green());
-
-    timer_text_ = NewLabel(p, &font20_, Green(), "ELEGÍ UN TIEMPO");
-    lv_obj_set_width(timer_text_, 216);
+    timer_count_ = NewLabel(p, &font_jotape_dots_5, Mint(), "00:00");
+    lv_obj_align(timer_count_, LV_ALIGN_TOP_MID, 0, 76);
+    timer_text_ = NewLabel(p, &text14_, Green(), "Elegí un tiempo");
+    lv_obj_set_width(timer_text_, 120);
     lv_label_set_long_mode(timer_text_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(timer_text_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(timer_text_, 12, 144);
+    lv_obj_align(timer_text_, LV_ALIGN_TOP_MID, 0, 126);
 
-    const char* presets[] = {"1 MIN", "5 MIN", "10 MIN"};
+    const char* presets[] = {"1 min", "5 min", "10 min"};
     for (int i = 0; i < 3; i++) {
-        timer_presets_[i] = NewButton(p, presets[i], 14 + i * 72, 182, 66, 44);
+        timer_presets_[i] = NewButton(p, presets[i], 12 + i * 76, 196, 68, 34);
     }
-    timer_cancel_ = NewButton(p, "CANCELAR", 30, 182, 180, 44);
+    timer_cancel_ = NewButton(p, "Cancelar", 60, 196, 120, 34);
     lv_obj_add_flag(timer_cancel_, LV_OBJ_FLAG_HIDDEN);
 }
+
+/* ---- Ringing ---- */
 
 void JotapeUi::CreateRinging() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kRinging)] = NewPanel(screen_);
     lv_obj_add_event_cb(p, RingClickCb, LV_EVENT_CLICKED, this);
 
-    ring_frame_ = Decor(p);
-    lv_obj_set_pos(ring_frame_, 4, 4);
-    lv_obj_set_size(ring_frame_, 232, 232);
-    lv_obj_set_style_border_color(ring_frame_, Orange(), 0);
-    lv_obj_set_style_border_width(ring_frame_, 4, 0);
-    lv_obj_set_style_radius(ring_frame_, 10, 0);
-
-    ring_icon_ = NewLabel(p, &font_jotape_bigicons_72, Orange(), "\xEE\xA1\x95");
-    lv_obj_align(ring_icon_, LV_ALIGN_TOP_MID, 0, 18);
-    ring_title_ = NewLabel(p, &font30_, Green(), "");
-    lv_obj_align(ring_title_, LV_ALIGN_TOP_MID, 0, 110);
-    ring_label_ = NewLabel(p, &font20_, Green(), "");
+    ring_glow_ = NewGlow(p, Orange());
+    lv_obj_center(ring_glow_);
+    ring_icon_ = NewLabel(p, &font_jotape_bigicons_72, Orange(), BIG_ALARM);
+    lv_obj_align(ring_icon_, LV_ALIGN_TOP_MID, 0, 14);
+    ring_title_ = NewLabel(p, &font_jotape_dots_6, Mint(), "");
+    lv_obj_align(ring_title_, LV_ALIGN_TOP_MID, 0, 104);
+    ring_label_ = NewLabel(p, &text18_, Orange(), "");
     lv_obj_set_width(ring_label_, 210);
     lv_label_set_long_mode(ring_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(ring_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(ring_label_, LV_ALIGN_TOP_MID, 0, 148);
-    lv_obj_t* hint = NewLabel(p, &font20_, Yellow(), "TOCÁ PARA APAGAR");
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -18);
+    lv_obj_align(ring_label_, LV_ALIGN_TOP_MID, 0, 162);
+    lv_obj_t* hint = NewLabel(p, &text14_, Yellow(), "Tocá para apagar");
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -14);
 }
 
 void JotapeUi::SetAlarms(const JotapeAlarmsView& view) {
@@ -822,7 +834,6 @@ void JotapeUi::SetAlarms(const JotapeAlarmsView& view) {
     if (home_info_ == nullptr) {
         return;
     }
-    // Home: running timer first, else next alarm
     if (view.timer_active) {
         lv_label_set_text(home_info_icon_, ICON_HOURGLASS);
         lv_label_set_text_fmt(home_info_text_, "%02d:%02d", view.timer_remaining_s / 60,
@@ -836,15 +847,15 @@ void JotapeUi::SetAlarms(const JotapeAlarmsView& view) {
         lv_obj_add_flag(home_info_, LV_OBJ_FLAG_HIDDEN);
     }
 
-    // Alarm list
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 5; i++) {
         if (i < static_cast<int>(view.alarms.size())) {
             const auto& a = view.alarms[i];
-            std::string text = a.time + "  " + a.repeat;
+            lv_label_set_text(alarm_times_[i], a.time.c_str());
+            std::string info = a.repeat;
             if (!a.label.empty()) {
-                text += "  " + Upper(a.label);
+                info = a.label + " · " + info;
             }
-            lv_label_set_text(alarm_rows_[i], text.c_str());
+            lv_label_set_text(alarm_infos_[i], info.c_str());
             lv_obj_remove_flag(alarm_rows_[i], LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_add_flag(alarm_rows_[i], LV_OBJ_FLAG_HIDDEN);
@@ -856,62 +867,41 @@ void JotapeUi::SetAlarms(const JotapeAlarmsView& view) {
         lv_obj_add_flag(alarm_empty_, LV_OBJ_FLAG_HIDDEN);
     }
 
-    // Timer
     if (view.timer_active) {
         lv_label_set_text_fmt(timer_count_, "%02d:%02d", view.timer_remaining_s / 60,
                               view.timer_remaining_s % 60);
         const int total = view.timer_total_s > 0 ? view.timer_total_s : 1;
-        lv_obj_set_width(timer_bar_, 200 * (total - view.timer_remaining_s) / total);
+        lv_arc_set_value(timer_arc_, 1000 * (total - view.timer_remaining_s) / total);
         lv_label_set_text(timer_text_,
-                          view.timer_label.empty() ? "EN MARCHA" : Upper(view.timer_label).c_str());
+                          view.timer_label.empty() ? "En marcha" : view.timer_label.c_str());
         for (auto b : timer_presets_) {
             lv_obj_add_flag(b, LV_OBJ_FLAG_HIDDEN);
         }
         lv_obj_remove_flag(timer_cancel_, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_label_set_text(timer_count_, "00:00");
-        lv_obj_set_width(timer_bar_, 0);
-        lv_label_set_text(timer_text_, "ELEGÍ UN TIEMPO");
+        lv_arc_set_value(timer_arc_, 0);
+        lv_label_set_text(timer_text_, "Elegí un tiempo");
         for (auto b : timer_presets_) {
             lv_obj_remove_flag(b, LV_OBJ_FLAG_HIDDEN);
         }
         lv_obj_add_flag(timer_cancel_, LV_OBJ_FLAG_HIDDEN);
     }
 
-    // Ringing
-    lv_label_set_text(ring_icon_, view.ringing_timer ? "\xEE\xA2\x8B" : "\xEE\xA1\x95");
+    lv_label_set_text(ring_icon_, view.ringing_timer ? BIG_HOURGLASS : BIG_ALARM);
     if (view.ringing_timer) {
-        lv_label_set_text(ring_title_, "¡TIEMPO!");
+        lv_label_set_text(ring_title_, "00:00");
+        lv_label_set_text(ring_label_, view.ring_label.empty()
+                                           ? "¡Tiempo!"
+                                           : ("¡" + view.ring_label + "!").c_str());
     } else {
-        lv_label_set_text_fmt(ring_title_, "ALARMA %s", view.ring_title.c_str());
-    }
-    lv_label_set_text(ring_label_, Upper(view.ring_label).c_str());
-}
-
-void JotapeUi::TimerButtonCb(lv_event_t* e) {
-    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
-    lv_obj_t* btn = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
-    self->menu_touched_ = lv_tick_get();
-    if (btn == self->timer_cancel_) {
-        if (self->on_timer_cancel) {
-            self->on_timer_cancel();
-        }
-        return;
-    }
-    const int minutes[] = {1, 5, 10};
-    for (int i = 0; i < 3; i++) {
-        if (btn == self->timer_presets_[i] && self->on_timer_start) {
-            self->on_timer_start(minutes[i] * 60);
-        }
+        lv_label_set_text(ring_title_, view.ring_title.c_str());
+        lv_label_set_text(ring_label_,
+                          view.ring_label.empty() ? "Alarma" : view.ring_label.c_str());
     }
 }
 
-void JotapeUi::RingClickCb(lv_event_t* e) {
-    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
-    if (self->current_ == JotapeScreen::kRinging && self->on_ring_stop) {
-        self->on_ring_stop();
-    }
-}
+/* ---- Screen switching and state ---- */
 
 void JotapeUi::Show(JotapeScreen screen) {
     pending_ = screen;
@@ -943,9 +933,7 @@ void JotapeUi::ApplyScreen(JotapeScreen screen) {
         screen == JotapeScreen::kAlarms || screen == JotapeScreen::kTimer) {
         menu_touched_ = lv_tick_get();
     }
-    if (screen == JotapeScreen::kMenu) {
-        SelectMenuRow(0);
-    } else if (screen == JotapeScreen::kHome) {
+    if (screen == JotapeScreen::kHome) {
         last_clock_min_ = -1;
         RefreshClock();
     }
@@ -964,27 +952,23 @@ void JotapeUi::SetStatus(const char* status) {
     if (terminal_status_ == nullptr || status == nullptr) {
         return;
     }
-    lv_label_set_text_fmt(terminal_status_, "> %s", status);
+    lv_label_set_text(terminal_status_, status);
 }
 
 void JotapeUi::SetMessage(const char* content) {
     if (terminal_message_ == nullptr) {
         return;
     }
-    // The pixel font has no full-width comma (used by some server/locale texts).
+    // Inter has no full-width comma (used by some server/locale texts).
     std::string normalized = content != nullptr ? content : "";
     for (size_t pos = normalized.find("\xEF\xBC\x8C"); pos != std::string::npos;
          pos = normalized.find("\xEF\xBC\x8C", pos)) {
         normalized.replace(pos, 3, ", ");
     }
-    const char* text = normalized.c_str();
-    lv_label_set_text(terminal_message_, text);
+    lv_label_set_text(terminal_message_, normalized.c_str());
 }
 
-void JotapeUi::SetSubtitleHidden(bool hidden) {
-    // The JOTAPE layout shows no subtitles; kept for the Display interface.
-    subtitle_hidden_ = hidden;
-}
+void JotapeUi::SetSubtitleHidden(bool hidden) { subtitle_hidden_ = hidden; }
 
 void JotapeUi::SetEmotion(const char* emotion) {
     JotapeFace* faces[] = {&boot_face_, &terminal_face_, &home_face_, &listen_face_, &speak_face_};
@@ -1005,30 +989,16 @@ void JotapeUi::ShowToast(const char* text, uint32_t duration_ms) {
     toast_until_ = lv_tick_get() + LV_MAX(duration_ms, 1u);
 }
 
-void JotapeUi::SelectMenuRow(int index) {
-    menu_selected_ = index;
-    for (int i = 0; i < static_cast<int>(JotapeMenuItem::kCount); i++) {
-        const bool selected = i == index;
-        lv_obj_set_style_border_width(menu_rows_[i], selected ? 2 : 0, 0);
-        lv_obj_set_style_text_color(menu_icons_[i], selected ? Yellow() : Green(), 0);
-        lv_obj_set_style_text_color(menu_texts_[i], selected ? Yellow() : Green(), 0);
-        if (selected) {
-            lv_label_set_text_fmt(menu_texts_[i], "> %s", kMenuEntries[i].text);
-        } else {
-            lv_label_set_text(menu_texts_[i], kMenuEntries[i].text);
-        }
-    }
-}
-
 void JotapeUi::RefreshClock() {
-    if (clock_label_ == nullptr) {
+    if (clock_hours_ == nullptr) {
         return;
     }
     struct tm now = {};
     if (!time_provider || !time_provider(&now)) {
         if (last_clock_min_ != -2) {
             last_clock_min_ = -2;
-            lv_label_set_text(clock_label_, "--:--");
+            lv_label_set_text(clock_hours_, "--");
+            lv_label_set_text(clock_minutes_, "--");
             lv_label_set_text(date_label_, "");
         }
         return;
@@ -1038,10 +1008,11 @@ void JotapeUi::RefreshClock() {
         return;
     }
     last_clock_min_ = minute;
-    lv_label_set_text_fmt(clock_label_, "%02d:%02d", now.tm_hour, now.tm_min);
+    lv_label_set_text_fmt(clock_hours_, "%02d", now.tm_hour);
+    lv_label_set_text_fmt(clock_minutes_, "%02d", now.tm_min);
     const int wday = now.tm_wday >= 0 && now.tm_wday < 7 ? now.tm_wday : 0;
     const int mon = now.tm_mon >= 0 && now.tm_mon < 12 ? now.tm_mon : 0;
-    lv_label_set_text_fmt(date_label_, "%s %02d %s", kDays[wday], now.tm_mday, kMonths[mon]);
+    lv_label_set_text_fmt(date_label_, "%s %d %s", kDays[wday], now.tm_mday, kMonths[mon]);
 }
 
 JotapeFace* JotapeUi::ActiveFace() {
@@ -1075,21 +1046,30 @@ void JotapeUi::OnTimer() {
     if (boot_hold_ && lv_tick_diff(now, boot_started_) >= kBootHoldMs) {
         EndBootHold();
     }
-
     if (toast_until_ != 0 && Reached(now, toast_until_)) {
         toast_until_ = 0;
         lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
     }
-
     if ((current_ == JotapeScreen::kMenu || current_ == JotapeScreen::kWeather ||
          current_ == JotapeScreen::kAlarms ||
          (current_ == JotapeScreen::kTimer && !alarms_view_.timer_active)) &&
         lv_tick_diff(now, menu_touched_) >= kMenuTimeoutMs) {
         Show(JotapeScreen::kHome);
     }
-
     if (current_ == JotapeScreen::kHome && tick_count_ % 20 == 0) {
         RefreshClock();
+    }
+
+    // Breathing glows (every other tick keeps redraws light)
+    if (tick_count_ % 2 == 0) {
+        if (current_ == JotapeScreen::kBoot) {
+            lv_obj_set_style_image_opa(boot_glow_, 60 + Breath(now, 3600) * 90 / 255, 0);
+        } else if (current_ == JotapeScreen::kHome) {
+            lv_obj_set_style_image_opa(home_glow_, 50 + Breath(now, 4400) * 70 / 255, 0);
+        } else if (current_ == JotapeScreen::kRinging) {
+            lv_obj_set_style_image_opa(ring_glow_, 70 + Breath(now, 900) * 185 / 255, 0);
+            lv_obj_set_style_text_opa(ring_title_, (now / 450) % 2 ? LV_OPA_COVER : LV_OPA_40, 0);
+        }
     }
 
     // Blink
@@ -1103,11 +1083,6 @@ void JotapeUi::OnTimer() {
             blink_end_ = now + 140;
             next_blink_ = now + 2500 + Random() % 3000;
         }
-    }
-
-    if (current_ == JotapeScreen::kRinging) {
-        const bool on = (now / 400) % 2 == 0;
-        lv_obj_set_style_border_opa(ring_frame_, on ? LV_OPA_COVER : LV_OPA_20, 0);
     }
 
     // Glance sideways now and then
@@ -1132,14 +1107,17 @@ void JotapeUi::OnTimer() {
             wave_level_ -= (wave_level_ - target + 3) / 4;
         }
         wave_level_ = LV_CLAMP(0, wave_level_, 100);
-        lv_obj_t** bars = current_ == JotapeScreen::kListening ? listen_wave_ : speak_wave_;
+        const bool listening = current_ == JotapeScreen::kListening;
+        lv_obj_t** bars = listening ? listen_wave_ : speak_wave_;
         if (wave_level_ < 5) {
             HideWave(bars);
         } else {
             UpdateWave(bars, wave_level_);
         }
-        if (current_ == JotapeScreen::kSpeaking) {
-            // Eyes pulse only while sound is actually coming out
+        // The glow behind the head swells with the voice
+        lv_obj_set_style_image_opa(listening ? listen_glow_ : speak_glow_,
+                                   40 + wave_level_ * 190 / 100, 0);
+        if (!listening) {
             speak_face_.SetTalkLevel(
                 wave_level_ < 5 ? -1 : static_cast<int>(Random() % (wave_level_ + 1)));
         }
@@ -1157,15 +1135,22 @@ void JotapeUi::HomeClickCb(lv_event_t* e) {
     }
 }
 
-void JotapeUi::MenuRowCb(lv_event_t* e) {
+void JotapeUi::BackHomeCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    if (self->current_ == JotapeScreen::kWeather || self->current_ == JotapeScreen::kAlarms) {
+        self->Show(JotapeScreen::kHome);
+    }
+}
+
+void JotapeUi::MenuTileCb(lv_event_t* e) {
     auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
     if (self->current_ != JotapeScreen::kMenu) {
         return;
     }
-    lv_obj_t* row = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    lv_obj_t* tile = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
     int index = -1;
     for (int i = 0; i < static_cast<int>(JotapeMenuItem::kCount); i++) {
-        if (self->menu_rows_[i] == row) {
+        if (self->menu_tiles_[i] == tile) {
             index = i;
         }
     }
@@ -1173,23 +1158,51 @@ void JotapeUi::MenuRowCb(lv_event_t* e) {
         return;
     }
     self->menu_touched_ = lv_tick_get();
-    if (lv_event_get_code(e) == LV_EVENT_PRESSED) {
-        self->SelectMenuRow(index);
+    switch (static_cast<JotapeMenuItem>(index)) {
+        case JotapeMenuItem::kClock:
+            self->Show(JotapeScreen::kHome);
+            break;
+        case JotapeMenuItem::kWeather:
+            self->Show(JotapeScreen::kWeather);
+            break;
+        case JotapeMenuItem::kAlarms:
+            self->Show(JotapeScreen::kAlarms);
+            break;
+        case JotapeMenuItem::kTimer:
+            self->Show(JotapeScreen::kTimer);
+            break;
+        default:
+            if (self->on_menu_item) {
+                self->on_menu_item(static_cast<JotapeMenuItem>(index));
+            } else {
+                self->ShowToast("Próximamente", 1500);
+            }
+            break;
+    }
+}
+
+void JotapeUi::TimerButtonCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    lv_obj_t* btn = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    self->menu_touched_ = lv_tick_get();
+    if (btn == self->timer_cancel_) {
+        if (self->on_timer_cancel) {
+            self->on_timer_cancel();
+        }
         return;
     }
-    auto item = static_cast<JotapeMenuItem>(index);
-    if (item == JotapeMenuItem::kClock) {
-        self->Show(JotapeScreen::kHome);
-    } else if (item == JotapeMenuItem::kWeather) {
-        self->Show(JotapeScreen::kWeather);
-    } else if (item == JotapeMenuItem::kAlarms) {
-        self->Show(JotapeScreen::kAlarms);
-    } else if (item == JotapeMenuItem::kTimer) {
-        self->Show(JotapeScreen::kTimer);
-    } else if (self->on_menu_item) {
-        self->on_menu_item(item);
-    } else {
-        self->ShowToast("PRÓXIMAMENTE", 1500);
+    const int minutes[] = {1, 5, 10};
+    for (int i = 0; i < 3; i++) {
+        if (btn == self->timer_presets_[i] && self->on_timer_start) {
+            self->on_timer_start(minutes[i] * 60);
+        }
+    }
+}
+
+void JotapeUi::RingClickCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    if (self->current_ == JotapeScreen::kRinging && self->on_ring_stop) {
+        self->on_ring_stop();
     }
 }
 
@@ -1200,13 +1213,13 @@ void JotapeUi::GestureCb(lv_event_t* e) {
         return;
     }
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
-    if (self->current_ == JotapeScreen::kHome && dir == LV_DIR_LEFT) {
+    const auto cur = self->current_;
+    if (cur == JotapeScreen::kHome && dir == LV_DIR_LEFT) {
         self->Show(JotapeScreen::kMenu);
-    } else if (self->current_ == JotapeScreen::kMenu && dir == LV_DIR_RIGHT) {
+    } else if (cur == JotapeScreen::kMenu && dir == LV_DIR_RIGHT) {
         self->Show(JotapeScreen::kHome);
-    } else if ((self->current_ == JotapeScreen::kWeather ||
-                self->current_ == JotapeScreen::kAlarms ||
-                self->current_ == JotapeScreen::kTimer) &&
+    } else if ((cur == JotapeScreen::kWeather || cur == JotapeScreen::kAlarms ||
+                cur == JotapeScreen::kTimer) &&
                dir == LV_DIR_RIGHT) {
         self->Show(JotapeScreen::kMenu);
     }

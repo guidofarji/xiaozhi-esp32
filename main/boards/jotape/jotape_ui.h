@@ -165,8 +165,11 @@ public:
 private:
     lv_obj_t* NewPanel(lv_obj_t* parent);
     lv_obj_t* NewLabel(lv_obj_t* parent, const lv_font_t* font, lv_color_t color, const char* text);
-    void AddFrame(lv_obj_t* parent, int x, int y, int w, int h, bool green_border);
-    void AddBracket(lv_obj_t* parent, int x, int y, bool right, bool bottom, int len);
+    // Frosted glass card: tinted gradient, thin translucent border, top sheen, soft glow.
+    lv_obj_t* Glass(lv_obj_t* parent, int x, int y, int w, int h, int radius, lv_color_t tint);
+    void TintGlass(lv_obj_t* glass, lv_color_t tint);
+    lv_obj_t* NewGlow(lv_obj_t* parent, lv_color_t color);
+    lv_obj_t* NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h);
     void CreateWave(lv_obj_t* parent, lv_obj_t** bars, lv_color_t color);
     void UpdateWave(lv_obj_t** bars, int level);
     void HideWave(lv_obj_t** bars);
@@ -182,10 +185,8 @@ private:
     void CreateAlarms();
     void CreateTimer();
     void CreateRinging();
-    lv_obj_t* NewButton(lv_obj_t* parent, const char* text, int x, int y, int w, int h);
 
     void ApplyScreen(JotapeScreen screen);
-    void SelectMenuRow(int index);
     void RefreshClock();
     void OnTimer();
     JotapeFace* ActiveFace();
@@ -193,8 +194,11 @@ private:
 
     static void TimerCb(lv_timer_t* timer);
     static void HomeClickCb(lv_event_t* e);
-    static void MenuRowCb(lv_event_t* e);
+    static void BackHomeCb(lv_event_t* e);
+    static void MenuTileCb(lv_event_t* e);
     static void GestureCb(lv_event_t* e);
+    static void TimerButtonCb(lv_event_t* e);
+    static void RingClickCb(lv_event_t* e);
 
     lv_obj_t* screen_ = nullptr;
     lv_obj_t* panels_[10] = {};
@@ -207,8 +211,9 @@ private:
     bool subtitle_hidden_ = false;
 
     const lv_font_t* status_icon_font_ = nullptr;
-    lv_font_t font20_;
-    lv_font_t font30_;
+    lv_font_t text14_;  // Inter with fallback for other scripts
+    lv_font_t text18_;
+    lv_font_t dots3_;  // dot-matrix titles with Inter fallback
 
     JotapeFace boot_face_;
     JotapeFace terminal_face_;
@@ -216,41 +221,51 @@ private:
     JotapeFace listen_face_;
     JotapeFace speak_face_;
 
+    lv_obj_t* boot_glow_ = nullptr;
+    lv_obj_t* home_glow_ = nullptr;
+    lv_obj_t* listen_glow_ = nullptr;
+    lv_obj_t* speak_glow_ = nullptr;
+    lv_obj_t* ring_glow_ = nullptr;
+
     lv_obj_t* terminal_status_ = nullptr;
     lv_obj_t* terminal_message_ = nullptr;
-    lv_obj_t* date_label_ = nullptr;
-    lv_obj_t* weather_city_ = nullptr;
-    lv_obj_t* weather_icon_ = nullptr;
-    lv_obj_t* weather_temp_ = nullptr;
-    lv_obj_t* weather_range_ = nullptr;
-    lv_obj_t* weather_desc_ = nullptr;
-    static void WeatherClickCb(lv_event_t* e);
-    static void TimerButtonCb(lv_event_t* e);
-    static void RingClickCb(lv_event_t* e);
 
-    JotapeAlarmsView alarms_view_;
-    lv_obj_t* home_info_ = nullptr;
-    lv_obj_t* home_info_icon_ = nullptr;
-    lv_obj_t* home_info_text_ = nullptr;
-    lv_obj_t* alarm_rows_[6] = {};
-    lv_obj_t* alarm_empty_ = nullptr;
-    lv_obj_t* timer_count_ = nullptr;
-    lv_obj_t* timer_bar_ = nullptr;
-    lv_obj_t* timer_text_ = nullptr;
-    lv_obj_t* timer_presets_[3] = {};
-    lv_obj_t* timer_cancel_ = nullptr;
-    lv_obj_t* ring_frame_ = nullptr;
-    lv_obj_t* ring_icon_ = nullptr;
-    lv_obj_t* ring_title_ = nullptr;
-    lv_obj_t* ring_label_ = nullptr;
-    lv_obj_t* clock_label_ = nullptr;
+    lv_obj_t* date_label_ = nullptr;
+    lv_obj_t* clock_hours_ = nullptr;
+    lv_obj_t* clock_minutes_ = nullptr;
     lv_obj_t* network_label_ = nullptr;
     lv_obj_t* battery_label_ = nullptr;
     lv_obj_t* mute_label_ = nullptr;
-    lv_obj_t* menu_rows_[static_cast<int>(JotapeMenuItem::kCount)] = {};
-    lv_obj_t* menu_texts_[static_cast<int>(JotapeMenuItem::kCount)] = {};
-    lv_obj_t* menu_icons_[static_cast<int>(JotapeMenuItem::kCount)] = {};
-    int menu_selected_ = 0;
+    lv_obj_t* home_info_ = nullptr;
+    lv_obj_t* home_info_icon_ = nullptr;
+    lv_obj_t* home_info_text_ = nullptr;
+
+    lv_obj_t* menu_tiles_[static_cast<int>(JotapeMenuItem::kCount)] = {};
+
+    lv_obj_t* weather_card_ = nullptr;
+    lv_obj_t* weather_city_ = nullptr;
+    lv_obj_t* weather_icon_ = nullptr;
+    lv_obj_t* weather_temp_ = nullptr;
+    lv_obj_t* weather_max_ = nullptr;
+    lv_obj_t* weather_min_ = nullptr;
+    lv_obj_t* weather_desc_ = nullptr;
+
+    JotapeAlarmsView alarms_view_;
+    lv_obj_t* alarm_rows_[5] = {};
+    lv_obj_t* alarm_times_[5] = {};
+    lv_obj_t* alarm_infos_[5] = {};
+    lv_obj_t* alarm_empty_ = nullptr;
+
+    lv_obj_t* timer_arc_ = nullptr;
+    lv_obj_t* timer_count_ = nullptr;
+    lv_obj_t* timer_text_ = nullptr;
+    lv_obj_t* timer_presets_[3] = {};
+    lv_obj_t* timer_cancel_ = nullptr;
+
+    lv_obj_t* ring_icon_ = nullptr;
+    lv_obj_t* ring_title_ = nullptr;
+    lv_obj_t* ring_label_ = nullptr;
+
     lv_obj_t* listen_wave_[10] = {};
     lv_obj_t* speak_wave_[10] = {};
     lv_obj_t* toast_ = nullptr;
@@ -262,7 +277,7 @@ private:
     uint32_t blink_end_ = 0;
     int last_clock_min_ = -1;
     uint32_t rng_ = 0x4A07A9E1;
-    int wave_level_ = 0;  // smoothed sound level shown by the wave
+    int wave_level_ = 0;  // smoothed sound level shown by the wave and the glow
     lv_timer_t* timer_ = nullptr;
 };
 

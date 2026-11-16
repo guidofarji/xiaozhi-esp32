@@ -5,6 +5,15 @@ Board propia basada en `waveshare/esp32-s3-touch-lcd-1.54`
 audio ES8311 + ES7210). El hardware y los pines son idénticos a la board
 de Waveshare; ver `config.h`.
 
+### Estética "glass" (rama `jotape-glass`)
+
+Paneles de vidrio (degradé + borde translúcido + brillo superior + glow),
+tipografía de puntos 5x7 (`font_jotape_dots_*`, generada con
+`dots2lvgl.py`), textos en Inter (`font_jotape_inter_*`, SIL OFL), halo
+radial detrás de la cabeza (`jotape_glow.c`) que respira y late con la voz,
+menú en mosaicos y temporizador con aro de progreso. El casco usa RGB565A8
+para que el halo se vea alrededor.
+
 ## Clima
 
 `jotape_weather.*` consulta Open-Meteo (gratis, sin clave) en una tarea en
