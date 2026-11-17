@@ -25,6 +25,8 @@ enum class JotapeScreen {
     kAlarms,     // Alarm list
     kTimer,      // Countdown timer
     kRinging,    // An alarm or the timer is ringing
+    kNight,      // Night mode: dim clock, JOTAPE asleep
+    kSettings,   // Brightness, volume, Wi-Fi
 };
 
 enum class JotapeMenuItem {
@@ -32,7 +34,7 @@ enum class JotapeMenuItem {
     kWeather,
     kAlarms,
     kTimer,
-    kNews,
+    kNight,
     kSettings,
     kCount,
 };
@@ -139,6 +141,8 @@ public:
     void SetSubtitleHidden(bool hidden);
     void SetWeather(const JotapeWeatherView& weather);
     void SetAlarms(const JotapeAlarmsView& alarms);
+    // Night mode on/off (the board dims the backlight).
+    void SetNightMode(bool on);
 
     // Called every second to refresh the clock; return false if the time is
     // not known yet.
@@ -152,6 +156,13 @@ public:
     std::function<void(int seconds)> on_timer_start;
     std::function<void()> on_timer_cancel;
     std::function<void()> on_ring_stop;
+    // Night mode and settings actions.
+    std::function<void(bool on)> on_night_mode;
+    std::function<void(int percent)> on_brightness;
+    std::function<void(int percent)> on_volume;
+    std::function<void()> on_wifi_reset;
+    // Current brightness and volume (0..100), read when Ajustes opens.
+    std::function<void(int& brightness, int& volume)> settings_values;
 
     lv_obj_t* network_label() const { return network_label_; }
     lv_obj_t* battery_label() const { return battery_label_; }
@@ -184,6 +195,9 @@ private:
     void CreateAlarms();
     void CreateTimer();
     void CreateRinging();
+    void CreateNight();
+    void CreateSettings();
+    lv_obj_t* NewSlider(lv_obj_t* parent, const char* label, int y);
 
     void ApplyScreen(JotapeScreen screen);
     void RefreshClock();
@@ -198,9 +212,12 @@ private:
     static void GestureCb(lv_event_t* e);
     static void TimerButtonCb(lv_event_t* e);
     static void RingClickCb(lv_event_t* e);
+    static void NightEventCb(lv_event_t* e);
+    static void SliderCb(lv_event_t* e);
+    static void WifiButtonCb(lv_event_t* e);
 
     lv_obj_t* screen_ = nullptr;
-    lv_obj_t* panels_[10] = {};
+    lv_obj_t* panels_[12] = {};
     JotapeScreen current_ = JotapeScreen::kBoot;
     JotapeScreen pending_ = JotapeScreen::kBoot;
     bool boot_hold_ = true;
@@ -219,6 +236,15 @@ private:
     JotapeFace home_face_;
     JotapeFace listen_face_;
     JotapeFace speak_face_;
+    JotapeFace night_face_;
+
+    bool night_ = false;
+    lv_obj_t* night_hours_ = nullptr;
+    lv_obj_t* night_minutes_ = nullptr;
+    lv_obj_t* brightness_slider_ = nullptr;
+    lv_obj_t* volume_slider_ = nullptr;
+    lv_obj_t* wifi_button_label_ = nullptr;
+    uint32_t wifi_confirm_until_ = 0;
 
     lv_obj_t* terminal_status_ = nullptr;
     lv_obj_t* terminal_message_ = nullptr;

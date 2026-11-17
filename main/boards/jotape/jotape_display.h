@@ -31,6 +31,12 @@ public:
     void SetWeather(const JotapeWeatherView& weather);
     // Updates alarm/timer screens; shows the ringing screen while idle.
     void SetAlarms(const JotapeAlarmsView& alarms);
+    // Night mode screen (the board handles the backlight).
+    void SetNightMode(bool on);
+    void SetSettingsActions(std::function<void(bool)> night_mode,
+                            std::function<void(int)> brightness, std::function<void(int)> volume,
+                            std::function<void()> wifi_reset,
+                            std::function<void(int&, int&)> values);
     void SetAlarmActions(std::function<void(int)> timer_start, std::function<void()> timer_cancel,
                          std::function<void()> ring_stop);
 
@@ -42,6 +48,7 @@ private:
     std::function<int()> sound_level_;
     JotapeWeatherView weather_;
     JotapeAlarmsView alarms_;
+    bool night_ = false;
 };
 
 #endif  // JOTAPE_DISPLAY_H

@@ -14,6 +14,15 @@ y la cabeza flotando sin halo,
 menú en mosaicos y temporizador con aro de progreso. El casco usa RGB565A8
 para integrarse con cualquier fondo.
 
+## Modo noche y Ajustes
+
+- **Modo noche** (mosaico "Noche" o por voz con `self.screen.night_mode`):
+  brillo al mínimo, reloj de puntos naranja tenue y JOTAPE dormido. Ignora
+  toques cortos; se sale manteniendo presionado. No se apaga por ahorro de
+  energía; si suena una alarma sube el brillo y después vuelve a bajar.
+- **Ajustes**: barras de brillo y volumen (se guardan) y "Cambiar Wi-Fi"
+  (pide tocar dos veces).
+
 ## Clima
 
 `jotape_weather.*` consulta Open-Meteo (gratis, sin clave) en una tarea en

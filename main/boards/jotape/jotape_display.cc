@@ -60,8 +60,13 @@ void JotapeDisplay::SyncScreen() {
             const auto current = ui_.current();
             if (alarms_.ringing) {
                 ui_.Show(JotapeScreen::kRinging);
-            } else if (current != JotapeScreen::kMenu && current != JotapeScreen::kWeather &&
-                       current != JotapeScreen::kAlarms && current != JotapeScreen::kTimer) {
+            } else if (night_) {
+                if (current != JotapeScreen::kMenu && current != JotapeScreen::kSettings) {
+                    ui_.Show(JotapeScreen::kNight);
+                }
+            } else if (current != JotapeScreen::kMenu && current != JotapeScreen::kSettings &&
+                       current != JotapeScreen::kWeather && current != JotapeScreen::kAlarms &&
+                       current != JotapeScreen::kTimer) {
                 ui_.Show(JotapeScreen::kHome);
             }
             break;
@@ -163,6 +168,28 @@ void JotapeDisplay::SetAlarms(const JotapeAlarmsView& alarms) {
         ui_.SetAlarms(alarms_);
         SyncScreen();
     }
+}
+
+void JotapeDisplay::SetNightMode(bool on) {
+    DisplayLockGuard lock(this);
+    night_ = on;
+    if (setup_ui_called_) {
+        ui_.SetNightMode(on);
+        SyncScreen();
+    }
+}
+
+void JotapeDisplay::SetSettingsActions(std::function<void(bool)> night_mode,
+                                       std::function<void(int)> brightness,
+                                       std::function<void(int)> volume,
+                                       std::function<void()> wifi_reset,
+                                       std::function<void(int&, int&)> values) {
+    DisplayLockGuard lock(this);
+    ui_.on_night_mode = night_mode;
+    ui_.on_brightness = brightness;
+    ui_.on_volume = volume;
+    ui_.on_wifi_reset = wifi_reset;
+    ui_.settings_values = values;
 }
 
 void JotapeDisplay::SetAlarmActions(std::function<void(int)> timer_start,

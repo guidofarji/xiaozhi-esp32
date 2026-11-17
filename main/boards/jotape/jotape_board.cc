@@ -6,6 +6,7 @@
 #include "jotape_display.h"
 #include "jotape_motion.h"
 #include "jotape_weather.h"
+#include "settings.h"
 
 #include <algorithm>
 #include <atomic>
@@ -71,6 +72,46 @@ private:
     esp_lcd_panel_handle_t panel_ = nullptr;
     esp_lcd_touch_handle_t touch_ = nullptr;
     std::atomic<JotapeAudioCodec*> codec_{nullptr};
+    static constexpr uint8_t kNightBrightness = 6;
+    std::atomic<bool> night_mode_{false};
+
+    void SetNightMode(bool on) {
+        night_mode_ = on;
+        if (on) {
+            GetBacklight()->SetBrightness(kNightBrightness);
+        } else {
+            GetBacklight()->RestoreBrightness();
+        }
+        static_cast<JotapeDisplay*>(display_)->SetNightMode(on);
+    }
+
+    void InitializeSettings() {
+        static_cast<JotapeDisplay*>(display_)->SetSettingsActions(
+            [this](bool on) { SetNightMode(on); },
+            [this](int percent) {
+                // Persist the new level; in night mode keep the screen dim until it ends.
+                auto backlight = GetBacklight();
+                backlight->SetBrightness(static_cast<uint8_t>(percent), true);
+                if (night_mode_) {
+                    backlight->SetBrightness(kNightBrightness);
+                }
+            },
+            [this](int percent) {
+                JotapeAudioCodec* codec = codec_.load();
+                if (codec != nullptr) {
+                    codec->SetOutputVolume(percent);
+                }
+            },
+            [this]() {
+                Application::GetInstance().Schedule([this]() { EnterWifiConfigMode(); });
+            },
+            [this](int& brightness, int& volume) {
+                Settings settings("display", false);
+                brightness = settings.GetInt("brightness", GetBacklight()->brightness());
+                JotapeAudioCodec* codec = codec_.load();
+                volume = codec != nullptr ? codec->output_volume() : 70;
+            });
+    }
     int rotation_ = -1;
 
     // Rotates the UI (panel scan direction + LVGL coordinates + touch).
@@ -160,15 +201,24 @@ private:
             auto display = GetDisplay();
             display->SetChatMessage("system", "");
             display->SetEmotion("sleepy");
-            GetBacklight()->SetBrightness(20);
+            if (!night_mode_) {
+                GetBacklight()->SetBrightness(20);
+            }
         });
         power_save_timer_->OnExitSleepMode([this]() {
             auto display = GetDisplay();
             display->SetChatMessage("system", "");
             display->SetEmotion("neutral");
-            GetBacklight()->RestoreBrightness();
+            if (night_mode_) {
+                GetBacklight()->SetBrightness(kNightBrightness);
+            } else {
+                GetBacklight()->RestoreBrightness();
+            }
         });
         power_save_timer_->OnShutdownRequest([this]() {
+            if (night_mode_) {
+                return;  // stay on all night as a bedside clock
+            }
             power_manager_->PowerOff();
         });
         power_save_timer_->SetEnabled(true);
@@ -390,7 +440,7 @@ private:
             []() { JotapeAlarms::GetInstance().CancelTimer(); },
             []() { JotapeAlarms::GetInstance().StopRinging(); });
         alarms.Start(
-            [display](const JotapeAlarmState& state) {
+            [this, display](const JotapeAlarmState& state) {
                 JotapeAlarmsView view;
                 for (const auto& a : state.alarms) {
                     char time_text[8];
@@ -407,17 +457,35 @@ private:
                 view.ring_title = state.ring_title;
                 view.ring_label = state.ring_label;
                 display->SetAlarms(view);
+                // Back to the dim night screen once the alarm stops.
+                static bool was_ringing = false;
+                if (was_ringing && !state.ringing && night_mode_) {
+                    GetBacklight()->SetBrightness(kNightBrightness);
+                }
+                was_ringing = state.ringing;
             },
             [this]() {
                 // Turn the screen back on so the alarm can be seen.
                 if (power_save_timer_ != nullptr) {
                     power_save_timer_->WakeUp();
                 }
+                if (night_mode_) {
+                    GetBacklight()->RestoreBrightness();
+                }
             });
     }
 
     void InitializeTools() {
         auto &mcp_server = McpServer::GetInstance();
+        mcp_server.AddTool("self.screen.night_mode",
+            "Turn JOTAPE's night mode on or off: a very dim screen with the clock and JOTAPE "
+            "asleep, for the bedside. Use when the user says good night or asks for night mode.",
+            PropertyList({Property("enabled", kPropertyTypeBoolean)}),
+            [this](const PropertyList& properties) -> ReturnValue {
+                bool on = properties["enabled"].value<bool>();
+                SetNightMode(on);
+                return std::string(on ? "Modo noche activado" : "Modo noche desactivado");
+            });
         mcp_server.AddTool("self.alarm.set",
             "Set an alarm on JOTAPE. time is 24h \"HH:MM\" local time. repeat is one of "
             "\"once\", \"daily\", \"weekdays\" (Mon-Fri) or \"weekends\". label is optional "
@@ -549,6 +617,7 @@ public:
         InitializeRotation();
         InitializeWeather();
         InitializeAlarms();
+        InitializeSettings();
         static_cast<JotapeDisplay*>(display_)->SetSoundLevelProvider([this]() {
             JotapeAudioCodec* codec = codec_.load();
             if (codec == nullptr) {

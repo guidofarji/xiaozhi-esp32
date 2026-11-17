@@ -33,7 +33,7 @@ constexpr uint32_t kTimerPeriodMs = 50;
 #define ICON_CLOUD "\xEE\x8A\xBD"      // U+E2BD cloud
 #define ICON_BELL "\xEE\x9F\xB4"       // U+E7F4 notifications
 #define ICON_HOURGLASS "\xEE\xA2\x8B"  // U+E88B hourglass_empty
-#define ICON_NEWSPAPER "\xEE\xAE\x81"  // U+EB81 newspaper
+#define ICON_MOON "\xEE\x94\x9C"       // U+E51C dark_mode
 #define ICON_SETTINGS "\xEE\xA2\xB8"   // U+E8B8 settings
 #define BIG_ALARM "\xEE\xA1\x95"       // U+E855 alarm (72 px)
 #define BIG_HOURGLASS "\xEE\xA2\x8B"   // U+E88B (72 px)
@@ -55,8 +55,8 @@ struct MenuEntry {
 };
 
 const MenuEntry kMenuEntries[] = {
-    {ICON_SCHEDULE, "Hora"},   {ICON_CLOUD, "Clima"},        {ICON_BELL, "Alarmas"},
-    {ICON_HOURGLASS, "Timer"}, {ICON_NEWSPAPER, "Noticias"}, {ICON_SETTINGS, "Ajustes"},
+    {ICON_SCHEDULE, "Hora"},   {ICON_CLOUD, "Clima"}, {ICON_BELL, "Alarmas"},
+    {ICON_HOURGLASS, "Timer"}, {ICON_MOON, "Noche"},  {ICON_SETTINGS, "Ajustes"},
 };
 
 // Plain object with no theme styles, not clickable or scrollable.
@@ -506,6 +506,8 @@ void JotapeUi::Create(lv_obj_t* screen, const Fonts& fonts) {
     CreateAlarms();
     CreateTimer();
     CreateRinging();
+    CreateNight();
+    CreateSettings();
 
     // Toast: glass pill above every panel
     toast_ = Glass(screen_, 0, 0, 10, 10, 16, Orange());
@@ -645,7 +647,13 @@ void JotapeUi::CreateHome() {
     lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kHome)] = NewPanel(screen_);
     lv_obj_add_event_cb(p, HomeClickCb, LV_EVENT_CLICKED, this);
 
-    lv_obj_t* pill = Glass(p, 12, 8, 216, 30, 15, Green());
+    // Top bar: no outline, just a faint tinted backdrop
+    lv_obj_t* pill = Decor(p);
+    lv_obj_set_pos(pill, 12, 8);
+    lv_obj_set_size(pill, 216, 30);
+    lv_obj_set_style_radius(pill, 15, 0);
+    lv_obj_set_style_bg_color(pill, lv_color_mix(Green(), lv_color_black(), 30), 0);
+    lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
     date_label_ = NewLabel(pill, &text14_, Mint(), "");
     lv_obj_align(date_label_, LV_ALIGN_LEFT_MID, 12, 0);
     lv_obj_t* icons = Decor(pill);
@@ -931,6 +939,122 @@ void JotapeUi::SetAlarms(const JotapeAlarmsView& view) {
     }
 }
 
+/* ---- Night mode ---- */
+
+void JotapeUi::CreateNight() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kNight)] = NewPanel(screen_);
+    lv_obj_add_event_cb(p, NightEventCb, LV_EVENT_SHORT_CLICKED, this);
+    lv_obj_add_event_cb(p, NightEventCb, LV_EVENT_LONG_PRESSED, this);
+
+    // Warm, very dim clock
+    lv_obj_t* clock = Decor(p);
+    lv_obj_set_size(clock, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(clock, LV_FLEX_FLOW_ROW);
+    lv_obj_align(clock, LV_ALIGN_TOP_MID, 0, 46);
+    night_hours_ = NewLabel(clock, &font_jotape_dots_7, lv_color_hex(0x9A4210), "--");
+    NewLabel(clock, &font_jotape_dots_7, lv_color_hex(0x5A2808), ":");
+    night_minutes_ = NewLabel(clock, &font_jotape_dots_7, lv_color_hex(0x9A4210), "--");
+
+    night_face_.Create(p, JotapeFaceSize::kBig);
+    night_face_.SetExpression("sleepy");
+    lv_obj_set_style_opa(night_face_.root(), LV_OPA_40, 0);
+    lv_obj_align(night_face_.root(), LV_ALIGN_BOTTOM_MID, 0, 34);
+}
+
+void JotapeUi::SetNightMode(bool on) {
+    night_ = on;
+    if (on) {
+        Show(JotapeScreen::kNight);
+    } else if (current_ == JotapeScreen::kNight) {
+        Show(JotapeScreen::kHome);
+    }
+}
+
+void JotapeUi::NightEventCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    if (self->current_ != JotapeScreen::kNight) {
+        return;
+    }
+    if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+        if (self->on_night_mode) {
+            self->on_night_mode(false);
+        }
+    } else {
+        self->ShowToast("Mantené para salir", 1500);
+    }
+}
+
+/* ---- Settings ---- */
+
+lv_obj_t* JotapeUi::NewSlider(lv_obj_t* parent, const char* label, int y) {
+    lv_obj_t* text = NewLabel(parent, &text14_, Mint(), label);
+    lv_obj_set_pos(text, 22, y);
+    lv_obj_t* slider = lv_slider_create(parent);
+    lv_obj_remove_style_all(slider);
+    lv_obj_set_size(slider, 164, 10);
+    lv_obj_set_pos(slider, 24, y + 30);
+    lv_slider_set_range(slider, 5, 100);
+    lv_obj_set_ext_click_area(slider, 14);
+    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, DimGreen(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_60, LV_PART_MAIN);
+    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, Green(), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider, Mint(), LV_PART_KNOB);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider, 6, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(slider, Orange(),
+                              static_cast<lv_style_selector_t>(LV_PART_KNOB) | LV_STATE_PRESSED);
+    lv_obj_add_event_cb(slider, SliderCb, LV_EVENT_RELEASED, this);
+    return slider;
+}
+
+void JotapeUi::CreateSettings() {
+    lv_obj_t* p = panels_[static_cast<int>(JotapeScreen::kSettings)] = NewPanel(screen_);
+    lv_obj_t* title = NewLabel(p, &dots3_, Green(), "AJUSTES");
+    lv_obj_set_pos(title, 14, 12);
+
+    lv_obj_t* card = Glass(p, 12, 38, 216, 136, 20, Green());
+    brightness_slider_ = NewSlider(card, "Brillo", 10);
+    volume_slider_ = NewSlider(card, "Volumen", 72);
+
+    lv_obj_t* wifi = NewButton(p, "Cambiar Wi-Fi", 30, 188, 180, 38);
+    lv_obj_remove_event_cb(wifi, TimerButtonCb);
+    lv_obj_add_event_cb(wifi, WifiButtonCb, LV_EVENT_CLICKED, this);
+    wifi_button_label_ = lv_obj_get_child(wifi, lv_obj_get_child_count(wifi) - 1);
+}
+
+void JotapeUi::SliderCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+    self->menu_touched_ = lv_tick_get();
+    const int value = lv_slider_get_value(slider);
+    if (slider == self->brightness_slider_ && self->on_brightness) {
+        self->on_brightness(value);
+    } else if (slider == self->volume_slider_ && self->on_volume) {
+        self->on_volume(value);
+    }
+}
+
+void JotapeUi::WifiButtonCb(lv_event_t* e) {
+    auto self = static_cast<JotapeUi*>(lv_event_get_user_data(e));
+    self->menu_touched_ = lv_tick_get();
+    const uint32_t now = lv_tick_get();
+    if (self->wifi_confirm_until_ != 0 && !Reached(now, self->wifi_confirm_until_)) {
+        self->wifi_confirm_until_ = 0;
+        lv_label_set_text(self->wifi_button_label_, "Cambiar Wi-Fi");
+        if (self->on_wifi_reset) {
+            self->on_wifi_reset();
+        }
+        return;
+    }
+    // First tap only arms the action
+    self->wifi_confirm_until_ = now + 3000;
+    lv_label_set_text(self->wifi_button_label_, "Tocá otra vez");
+}
+
 /* ---- Screen switching and state ---- */
 
 void JotapeUi::Show(JotapeScreen screen) {
@@ -960,8 +1084,19 @@ void JotapeUi::ApplyScreen(JotapeScreen screen) {
     HideWave(speak_wave_);
 
     if (screen == JotapeScreen::kMenu || screen == JotapeScreen::kWeather ||
-        screen == JotapeScreen::kAlarms || screen == JotapeScreen::kTimer) {
+        screen == JotapeScreen::kAlarms || screen == JotapeScreen::kTimer ||
+        screen == JotapeScreen::kSettings) {
         menu_touched_ = lv_tick_get();
+    }
+    if (screen == JotapeScreen::kSettings && settings_values) {
+        int brightness = 70, volume = 70;
+        settings_values(brightness, volume);
+        lv_slider_set_value(brightness_slider_, LV_CLAMP(5, brightness, 100), LV_ANIM_OFF);
+        lv_slider_set_value(volume_slider_, LV_CLAMP(5, volume, 100), LV_ANIM_OFF);
+    }
+    if (screen == JotapeScreen::kNight) {
+        last_clock_min_ = -1;
+        RefreshClock();
     }
     if (screen == JotapeScreen::kHome) {
         last_clock_min_ = -1;
@@ -1029,6 +1164,8 @@ void JotapeUi::RefreshClock() {
             last_clock_min_ = -2;
             lv_label_set_text(clock_hours_, "--");
             lv_label_set_text(clock_minutes_, "--");
+            lv_label_set_text(night_hours_, "--");
+            lv_label_set_text(night_minutes_, "--");
             lv_label_set_text(date_label_, "");
         }
         return;
@@ -1040,6 +1177,8 @@ void JotapeUi::RefreshClock() {
     last_clock_min_ = minute;
     lv_label_set_text_fmt(clock_hours_, "%02d", now.tm_hour);
     lv_label_set_text_fmt(clock_minutes_, "%02d", now.tm_min);
+    lv_label_set_text_fmt(night_hours_, "%02d", now.tm_hour);
+    lv_label_set_text_fmt(night_minutes_, "%02d", now.tm_min);
     const int wday = now.tm_wday >= 0 && now.tm_wday < 7 ? now.tm_wday : 0;
     const int mon = now.tm_mon >= 0 && now.tm_mon < 12 ? now.tm_mon : 0;
     lv_label_set_text_fmt(date_label_, "%s %d %s", kDays[wday], now.tm_mday, kMonths[mon]);
@@ -1081,13 +1220,18 @@ void JotapeUi::OnTimer() {
         lv_obj_add_flag(toast_, LV_OBJ_FLAG_HIDDEN);
     }
     if ((current_ == JotapeScreen::kMenu || current_ == JotapeScreen::kWeather ||
-         current_ == JotapeScreen::kAlarms ||
+         current_ == JotapeScreen::kAlarms || current_ == JotapeScreen::kSettings ||
          (current_ == JotapeScreen::kTimer && !alarms_view_.timer_active)) &&
         lv_tick_diff(now, menu_touched_) >= kMenuTimeoutMs) {
         Show(JotapeScreen::kHome);
     }
-    if (current_ == JotapeScreen::kHome && tick_count_ % 20 == 0) {
+    if ((current_ == JotapeScreen::kHome || current_ == JotapeScreen::kNight) &&
+        tick_count_ % 20 == 0) {
         RefreshClock();
+    }
+    if (wifi_confirm_until_ != 0 && Reached(now, wifi_confirm_until_)) {
+        wifi_confirm_until_ = 0;
+        lv_label_set_text(wifi_button_label_, "Cambiar Wi-Fi");
     }
 
     // Ringing: the time blinks
@@ -1191,6 +1335,14 @@ void JotapeUi::MenuTileCb(lv_event_t* e) {
         case JotapeMenuItem::kTimer:
             self->Show(JotapeScreen::kTimer);
             break;
+        case JotapeMenuItem::kNight:
+            if (self->on_night_mode) {
+                self->on_night_mode(true);
+            }
+            break;
+        case JotapeMenuItem::kSettings:
+            self->Show(JotapeScreen::kSettings);
+            break;
         default:
             if (self->on_menu_item) {
                 self->on_menu_item(static_cast<JotapeMenuItem>(index));
@@ -1239,7 +1391,7 @@ void JotapeUi::GestureCb(lv_event_t* e) {
     } else if (cur == JotapeScreen::kMenu && dir == LV_DIR_RIGHT) {
         self->Show(JotapeScreen::kHome);
     } else if ((cur == JotapeScreen::kWeather || cur == JotapeScreen::kAlarms ||
-                cur == JotapeScreen::kTimer) &&
+                cur == JotapeScreen::kTimer || cur == JotapeScreen::kSettings) &&
                dir == LV_DIR_RIGHT) {
         self->Show(JotapeScreen::kMenu);
     }
